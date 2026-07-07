@@ -1,20 +1,8 @@
-// LinuxifyWindows v1.0 — Total Windows 11 Desktop Customization Suite
-// Makes Windows look, feel, and behave like a Linux desktop environment.
-//
-// Architecture:
-//   Single WinForms application with a modern dark sidebar UI. Each panel
-//   exposes real Win32 API customizations: DWM transparency, accent colors,
-//   window corner radius, per-app opacity, wobbly windows (integrated from
-//   WobblyWindows v3), animated wallpapers, desktop widgets, panel/dock
-//   systems, icon pack management, cursor themes, font overrides, and
-//   full desktop environment presets (GNOME, KDE, XFCE, i3, macOS, etc).
-//
-//   All settings persist to %LOCALAPPDATA%\LinuxifyWindows\config.json.
-//   Desktop environment presets are switchable with one click and fully
-//   reversible. Icon packs and themes can be hot-swapped.
+// LinuxifyWindows v1.1 — Total Windows 11 Desktop Customization Suite
+// Integrates WobblyWindows v3 engine directly (no external dependency).
+// All settings apply real Win32/DWM/Registry changes.
 
 using System.Collections.Concurrent;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -24,14 +12,12 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Media;
 using Microsoft.Win32;
 
 namespace LinuxifyWindows;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ENTRY POINT
+// ENTRY
 // ═══════════════════════════════════════════════════════════════════════════════
 static class Program
 {
@@ -41,34 +27,68 @@ static class Program
         Native.SetProcessDpiAwarenessContext(Native.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-
         AppConfig.Load();
-        Log.Write("=== LinuxifyWindows v1.0 starting ===");
-
+        Log.Write("=== LinuxifyWindows v1.1 starting ===");
         Application.Run(new MainForm());
-
         Log.Write("=== exiting ===");
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CONFIGURATION — persisted to %LOCALAPPDATA%\LinuxifyWindows\config.json
+// CONFIG
 // ═══════════════════════════════════════════════════════════════════════════════
 sealed class AppConfig
 {
     public static AppConfig Current = new();
 
-    // ── Desktop Environment ──
+    // Desktop environment
     public string ActiveEnvironment { get; set; } = "Default";
-    public bool CustomPanelEnabled { get; set; } = false;
-    public string PanelPosition { get; set; } = "Bottom"; // Top, Bottom, Left, Right
+    public string PanelPosition { get; set; } = "Bottom";
     public int PanelSize { get; set; } = 48;
     public bool PanelAutoHide { get; set; } = false;
     public bool DockMode { get; set; } = false;
     public bool GlobalMenuEnabled { get; set; } = false;
-    public bool ShowDesktopIcons { get; set; } = true;
 
-    // ── Window Effects ──
+    // Window effects
+    public bool TransparencyEnabled { get; set; } = false;
+    public int DefaultOpacity { get; set; } = 100;
+    public bool BlurEnabled { get; set; } = false;
+    public bool RoundedCorners { get; set; } = true;
+    public int CornerRadius { get; set; } = 8;
+    public bool DropShadows { get; set; } = true;
+    public string MinimizeAnimation { get; set; } = "Scale";
+    public bool DesktopCube { get; set; } = false;
+    public int WorkspaceCount { get; set; } = 4;
+    public bool AnimatedWorkspaces { get; set; } = true;
+
+    // Per-app opacity
+    public Dictionary<string, int> PerAppOpacity { get; set; } = new();
+
+    // Tiling
+    public bool TilingEnabled { get; set; } = true;
+    public string TilingMode { get; set; } = "Manual";
+    public int TileGap { get; set; } = 4;
+    public bool EdgeSnapping { get; set; } = true;
+    public bool QuarterSnapping { get; set; } = true;
+
+    // Theme
+    public string ThemeName { get; set; } = "Cyberpunk Neon";
+    public string AccentColor { get; set; } = "#00E5FF";
+    public bool DarkMode { get; set; } = true;
+    public string FontFamily { get; set; } = "Segoe UI";
+    public string MonospaceFont { get; set; } = "Cascadia Code";
+    public bool TransparentTerminal { get; set; } = false;
+    public int TerminalOpacity { get; set; } = 85;
+
+    // Icons & Cursor
+    public string ActiveIconPack { get; set; } = "Default Windows";
+    public string CursorTheme { get; set; } = "Default";
+
+    // Wallpaper
+    public string WallpaperMode { get; set; } = "Static";
+    public string WallpaperPath { get; set; } = "";
+
+    // Wobbly Windows (integrated engine)
     public bool WobblyEnabled { get; set; } = false;
     public int WobblySpeed { get; set; } = 100;
     public int WobblyAmount { get; set; } = 75;
@@ -77,129 +97,46 @@ sealed class AppConfig
     public int WobblyStretch { get; set; } = 55;
     public bool WobblyDeform { get; set; } = true;
     public bool WobblyTiltEnabled { get; set; } = true;
+    public bool WobblySnap { get; set; } = true;
 
-    public bool TransparencyEnabled { get; set; } = false;
-    public int DefaultOpacity { get; set; } = 100;
-    public bool BlurEnabled { get; set; } = false;
-    public bool RoundedCorners { get; set; } = true;
-    public int CornerRadius { get; set; } = 8;
-    public bool DropShadows { get; set; } = true;
-    public bool AnimatedMinimize { get; set; } = true;
-    public string MinimizeAnimation { get; set; } = "Scale"; // Scale, MagicLamp, Burn, Fade
-    public bool DesktopZoom { get; set; } = false;
-    public bool PictureInPicture { get; set; } = false;
-
-    // ── Per-App Opacity ──
-    public Dictionary<string, int> PerAppOpacity { get; set; } = new();
-
-    // ── Window Tiling ──
-    public bool TilingEnabled { get; set; } = true;
-    public string TilingMode { get; set; } = "Manual"; // Manual, Auto, i3-like
-    public int TileGap { get; set; } = 4;
-    public bool SmartSnapping { get; set; } = true;
-    public bool EdgeSnapping { get; set; } = true;
-    public bool QuarterSnapping { get; set; } = true;
-
-    // ── Themes & Appearance ──
-    public string ThemeName { get; set; } = "Cyberpunk Neon";
-    public string AccentColor { get; set; } = "#00E5FF";
-    public string SecondaryAccent { get; set; } = "#FF0090";
-    public bool DarkMode { get; set; } = true;
-    public int WindowBorderWidth { get; set; } = 1;
-    public string WindowBorderColor { get; set; } = "#00E5FF";
-    public string FontFamily { get; set; } = "Segoe UI";
-    public int FontSize { get; set; } = 10;
-    public string TitleBarFont { get; set; } = "Segoe UI Semibold";
-    public string MonospaceFont { get; set; } = "Cascadia Code";
-    public bool TransparentTerminal { get; set; } = false;
-    public int TerminalOpacity { get; set; } = 85;
-    public bool TerminalBlur { get; set; } = true;
-
-    // ── Icon Packs ──
-    public string ActiveIconPack { get; set; } = "Default Windows";
-    public string CursorTheme { get; set; } = "Default";
-
-    // ── Wallpaper ──
-    public string WallpaperMode { get; set; } = "Static"; // Static, Animated, Video, GIF, Interactive
-    public string WallpaperPath { get; set; } = "";
-    public bool DesktopCube { get; set; } = false;
-    public bool Workspace3D { get; set; } = false;
-    public int WorkspaceCount { get; set; } = 4;
-    public bool AnimatedWorkspaces { get; set; } = true;
-
-    // ── Widgets ──
+    // Widgets
     public bool WidgetsEnabled { get; set; } = false;
-    public List<WidgetConfig> Widgets { get; set; } = new();
 
-    // ── Boot & Login ──
-    public bool CustomSplashScreen { get; set; } = false;
-    public string SplashImagePath { get; set; } = "";
-    public bool CustomLoginScreen { get; set; } = false;
-    public bool CustomLockScreen { get; set; } = false;
-    public bool BootAnimation { get; set; } = false;
+    // Boot
+    public bool RunAtStartup { get; set; } = false;
 
-    // ── Multi-Monitor ──
-    public bool IndependentPanels { get; set; } = false;
-    public bool IndependentWallpapers { get; set; } = false;
-
-    // ── Keyboard ──
-    public bool KeyboardDriven { get; set; } = false;
-    public Dictionary<string, string> KeyBindings { get; set; } = new()
-    {
-        ["Super+Enter"] = "Terminal",
-        ["Super+D"] = "Show Desktop",
-        ["Super+Q"] = "Close Window",
-        ["Super+E"] = "File Manager",
-        ["Super+1"] = "Workspace 1",
-        ["Super+2"] = "Workspace 2",
-        ["Super+3"] = "Workspace 3",
-        ["Super+4"] = "Workspace 4",
-        ["Super+Left"] = "Tile Left",
-        ["Super+Right"] = "Tile Right",
-        ["Super+Up"] = "Maximize",
-        ["Super+Down"] = "Minimize",
-        ["Super+F"] = "Fullscreen",
-        ["Super+Space"] = "App Launcher",
-    };
+    // Physics helpers (mirror WobblyWindows Settings)
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double Speed2 => Math.Pow(Math.Clamp(WobblySpeed, 40, 250) / 100.0, 2);
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double DampingRatio => 0.60 - 0.50 * Math.Clamp(WobblyAmount, 0, 100) / 100.0;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double HomeStiffnessNear => 430.0 * Speed2;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double HomeStiffnessFar => Math.Max(40.0, 320.0 - 2.6 * Math.Clamp(WobblySoftness, 0, 100)) * Speed2;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double StructuralStiffness => Math.Max(150.0, 700.0 - 3.2 * Math.Clamp(WobblySoftness, 0, 100)) * Speed2;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double TiltStiffness => 110.0 * Speed2;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double MaxDisplacementFactor => Math.Clamp(WobblyStretch, 20, 90) / 100.0;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double RigidStiffness => 700.0 * Speed2;
 
     static string Dir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "LinuxifyWindows");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinuxifyWindows");
     static string FilePath => Path.Combine(Dir, "config.json");
 
     public static void Load()
     {
-        try
-        {
-            if (File.Exists(FilePath))
-            {
-                var s = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(FilePath));
-                if (s != null) Current = s;
-            }
-        }
-        catch (Exception ex) { Log.Write("Config load failed: " + ex.Message); }
+        try { if (File.Exists(FilePath)) { var s = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(FilePath)); if (s != null) Current = s; } }
+        catch (Exception ex) { Log.Write("Config load: " + ex.Message); }
     }
-
     public static void Save()
     {
-        try
-        {
-            Directory.CreateDirectory(Dir);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(Current,
-                new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch (Exception ex) { Log.Write("Config save failed: " + ex.Message); }
+        try { Directory.CreateDirectory(Dir); File.WriteAllText(FilePath, JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true })); }
+        catch (Exception ex) { Log.Write("Config save: " + ex.Message); }
     }
-}
-
-sealed class WidgetConfig
-{
-    public string Type { get; set; } = "Clock";
-    public int X { get; set; } = 100;
-    public int Y { get; set; } = 100;
-    public int Width { get; set; } = 200;
-    public int Height { get; set; } = 100;
-    public int Opacity { get; set; } = 90;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -208,3111 +145,1517 @@ sealed class WidgetConfig
 static class Log
 {
     public static readonly string FilePath;
-    static readonly ConcurrentQueue<string> _queue = new();
-    static readonly AutoResetEvent _signal = new(false);
-
+    static readonly ConcurrentQueue<string> _q = new();
+    static readonly AutoResetEvent _sig = new(false);
     static Log()
     {
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "LinuxifyWindows");
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinuxifyWindows");
         try { Directory.CreateDirectory(dir); } catch { }
         FilePath = Path.Combine(dir, "linuxify.log");
-        try
-        {
-            if (File.Exists(FilePath) && new FileInfo(FilePath).Length > 1024 * 1024)
-                File.Delete(FilePath);
-        }
-        catch { }
-        var t = new Thread(Drain) { IsBackground = true, Name = "LogWriter" };
-        t.Start();
+        try { if (File.Exists(FilePath) && new FileInfo(FilePath).Length > 1024 * 1024) File.Delete(FilePath); } catch { }
+        new Thread(() => { var sb = new StringBuilder(); while (true) { _sig.WaitOne(2000); sb.Clear(); while (_q.TryDequeue(out var l)) sb.AppendLine(l); if (sb.Length > 0) try { File.AppendAllText(FilePath, sb.ToString()); } catch { } } }) { IsBackground = true }.Start();
     }
-
-    public static void Write(string msg)
-    {
-        _queue.Enqueue($"{DateTime.Now:HH:mm:ss.fff} {msg}");
-        _signal.Set();
-    }
-
-    static void Drain()
-    {
-        var sb = new StringBuilder();
-        while (true)
-        {
-            _signal.WaitOne(2000);
-            sb.Clear();
-            while (_queue.TryDequeue(out var line)) sb.AppendLine(line);
-            if (sb.Length > 0)
-                try { File.AppendAllText(FilePath, sb.ToString()); } catch { }
-        }
-    }
+    public static void Write(string msg) { _q.Enqueue($"{DateTime.Now:HH:mm:ss.fff} {msg}"); _sig.Set(); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// THEME COLORS — used throughout the UI
+// THEME
 // ═══════════════════════════════════════════════════════════════════════════════
 static class Theme
 {
     public static Color BgDeep = Color.FromArgb(8, 8, 16);
     public static Color BgDark = Color.FromArgb(12, 14, 28);
-    public static Color BgPanel = Color.FromArgb(16, 18, 36);
     public static Color BgCard = Color.FromArgb(22, 24, 48);
     public static Color BgHover = Color.FromArgb(30, 33, 60);
     public static Color BgActive = Color.FromArgb(38, 42, 72);
     public static Color Accent = Color.FromArgb(0, 229, 255);
     public static Color Accent2 = Color.FromArgb(255, 0, 144);
-    public static Color AccentDim = Color.FromArgb(0, 140, 160);
     public static Color Success = Color.FromArgb(0, 255, 136);
     public static Color Warning = Color.FromArgb(255, 200, 0);
     public static Color Danger = Color.FromArgb(255, 60, 80);
-    public static Color TextPrimary = Color.FromArgb(230, 235, 255);
-    public static Color TextSecondary = Color.FromArgb(140, 150, 180);
-    public static Color TextDim = Color.FromArgb(80, 90, 120);
+    public static Color Text1 = Color.FromArgb(230, 235, 255);
+    public static Color Text2 = Color.FromArgb(140, 150, 180);
+    public static Color Text3 = Color.FromArgb(80, 90, 120);
     public static Color Border = Color.FromArgb(40, 45, 80);
-    public static Color GlowCyan = Color.FromArgb(30, 0, 229, 255);
-    public static Color GlowPink = Color.FromArgb(20, 255, 0, 144);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DESKTOP ENVIRONMENT PRESETS
 // ═══════════════════════════════════════════════════════════════════════════════
-static class DesktopEnvironments
+static class Presets
 {
-    public record Preset(
-        string Name, string Description, string Category,
-        string PanelPos, int PanelSz, bool Dock, bool GlobalMenu,
-        string Accent, string Theme, string TilingMode,
-        bool Wobbly, bool Transparency, int Opacity,
-        bool RoundCorners, int CornerRad, string MinAnim,
-        string[] Features);
-
-    public static readonly Preset[] All =
-    {
-        new("Default Windows", "Stock Windows 11 experience", "Windows",
-            "Bottom", 48, false, false, "#0078D4", "Windows 11", "Manual",
-            false, false, 100, true, 8, "Scale",
-            new[] { "Taskbar", "Start Menu", "Snap Layouts" }),
-
-        new("GNOME 45", "Clean, minimal GNOME Shell with Activities overview", "Linux",
-            "Top", 32, true, false, "#1A73E8", "Adwaita Dark", "Manual",
-            false, true, 95, true, 12, "Scale",
-            new[] { "Top Bar", "Dash to Dock", "Activities Overview", "App Grid", "Dynamic Workspaces" }),
-
-        new("KDE Plasma 6", "Feature-rich KDE with panels, widgets, and effects", "Linux",
-            "Bottom", 44, false, false, "#1D99F3", "Breeze Dark", "Manual",
-            true, true, 92, true, 8, "MagicLamp",
-            new[] { "Plasma Panel", "System Tray", "KRunner", "Desktop Widgets", "KWin Effects", "Wobbly Windows" }),
-
-        new("XFCE Classic", "Lightweight classic desktop with dual panels", "Linux",
-            "Top", 28, false, false, "#2EB398", "Greybird Dark", "Manual",
-            false, false, 100, false, 0, "Scale",
-            new[] { "Top Panel", "Bottom Panel", "Whisker Menu", "Thunar", "Lightweight" }),
-
-        new("Cinnamon", "Traditional desktop, modern features (Linux Mint)", "Linux",
-            "Bottom", 40, false, false, "#8AB84A", "Mint-Y-Dark", "Manual",
-            false, true, 95, true, 6, "Scale",
-            new[] { "Cinnamon Panel", "Menu", "Nemo", "Applets", "Desklets" }),
-
-        new("i3 Tiling", "Keyboard-driven tiling window manager", "Linux",
-            "Bottom", 24, false, false, "#285577", "i3 Default", "i3-like",
-            false, false, 100, false, 0, "Fade",
-            new[] { "i3bar", "i3status", "Auto Tiling", "Keyboard Only", "Workspaces", "No Decorations" }),
-
-        new("Sway/Wayland", "Modern tiling compositor (i3 for Wayland)", "Linux",
-            "Bottom", 24, false, false, "#00B4D8", "Sway Dark", "i3-like",
-            false, true, 90, true, 6, "Fade",
-            new[] { "Waybar", "Auto Tiling", "Blur", "Transparency", "Rounded" }),
-
-        new("Hyprland", "Eye-candy tiling compositor with animations", "Linux",
-            "Top", 32, false, false, "#00E5FF", "Hyprland Neon", "Auto",
-            true, true, 85, true, 12, "MagicLamp",
-            new[] { "Waybar", "Wobbly", "Blur", "Animations", "Rounded", "Shadows", "Auto Tile" }),
-
-        new("MATE Classic", "Traditional GNOME 2 continuation", "Linux",
-            "Top", 28, false, true, "#6CAD45", "Green-Submarine", "Manual",
-            false, false, 100, false, 0, "Scale",
-            new[] { "Top Panel", "Bottom Panel", "Global Menu", "Caja", "MATE Menu" }),
-
-        new("Budgie", "Modern, focused desktop by Solus", "Linux",
-            "Top", 32, false, false, "#4BAE4F", "Budgie Dark", "Manual",
-            false, true, 95, true, 8, "Scale",
-            new[] { "Budgie Panel", "Raven Sidebar", "App Menu", "Notifications" }),
-
-        new("Deepin DDE", "Elegant Chinese-designed desktop environment", "Linux",
-            "Bottom", 48, true, false, "#0087FF", "Deepin Dark", "Manual",
-            false, true, 90, true, 16, "Scale",
-            new[] { "Fashion Dock", "Control Center", "Blur Effects", "Rounded Windows" }),
-
-        new("macOS Sonoma", "macOS-inspired layout with top bar and dock", "macOS",
-            "Top", 28, true, true, "#007AFF", "macOS Dark", "Manual",
-            false, true, 90, true, 10, "MagicLamp",
-            new[] { "Menu Bar", "Dock", "Global Menu", "Mission Control", "Spotlight" }),
-
-        new("Cyberpunk Neon", "Full neon cyberpunk aesthetic with max effects", "Custom",
-            "Bottom", 48, true, false, "#00E5FF", "Cyberpunk Dark", "Manual",
-            true, true, 88, true, 12, "Burn",
-            new[] { "Neon Dock", "Glow Effects", "Wobbly", "Transparency", "Animated Wallpaper", "Widgets" }),
-
-        new("Retro Pixel", "8-bit pixel art retro computing aesthetic", "Custom",
-            "Bottom", 32, false, false, "#00FF00", "Retro Terminal", "Manual",
-            false, false, 100, false, 0, "Fade",
-            new[] { "Pixel Font", "CRT Effect", "Green Terminal", "Retro Icons" }),
-
-        new("Glassmorphism", "Frosted glass aesthetic with transparency everywhere", "Custom",
-            "Bottom", 48, true, false, "#FFFFFF", "Glassmorphism", "Manual",
-            false, true, 75, true, 16, "Scale",
-            new[] { "Glass Panels", "Blur Background", "Light Borders", "Soft Shadows" }),
-
-        new("Material You", "Google's dynamic Material Design 3 aesthetic", "Custom",
-            "Bottom", 56, false, false, "#6750A4", "Material Dark", "Manual",
-            false, true, 95, true, 20, "Scale",
-            new[] { "Material Panel", "FAB", "Dynamic Color", "Large Radius", "Elevation" }),
-
-        new("Minimalist Rice", "Ultra-minimal 'rice' setup — gaps, no bar, terminal focus", "Custom",
-            "Top", 20, false, false, "#BD93F9", "Dracula", "Auto",
-            false, true, 88, true, 8, "Fade",
-            new[] { "Polybar", "Gaps", "No Decorations", "Terminal Focus", "Rofi Launcher" }),
-
-        new("Nord Cozy", "Warm, cozy Nord-themed desktop", "Custom",
-            "Top", 32, false, false, "#88C0D0", "Nord Dark", "Manual",
-            false, true, 93, true, 10, "Scale",
-            new[] { "Nord Colors", "Rounded", "Cozy Gaps", "Warm Feel" }),
+    public record DE(string Name, string Desc, string Cat, string Accent,
+        string Panel, int PanelSz, bool Dock, string Tiling,
+        bool Wobbly, bool Transp, int Opacity, bool Round, int Radius,
+        string MinAnim, string[] Tags);
+    public static readonly DE[] All = {
+        new("Default Windows", "Stock Windows 11", "Windows", "#0078D4", "Bottom", 48, false, "Manual", false, false, 100, true, 8, "Scale", new[]{"Taskbar","Start Menu","Snap Layouts"}),
+        new("GNOME 45", "Clean minimal GNOME Shell", "Linux", "#1A73E8", "Top", 32, true, "Manual", false, true, 95, true, 12, "Scale", new[]{"Top Bar","Dash to Dock","Activities","App Grid"}),
+        new("KDE Plasma 6", "Feature-rich with widgets and effects", "Linux", "#1D99F3", "Bottom", 44, false, "Manual", true, true, 92, true, 8, "MagicLamp", new[]{"Plasma Panel","KRunner","Widgets","Wobbly"}),
+        new("XFCE Classic", "Lightweight dual-panel desktop", "Linux", "#2EB398", "Top", 28, false, "Manual", false, false, 100, false, 0, "Scale", new[]{"Top Panel","Bottom Panel","Whisker Menu"}),
+        new("Cinnamon", "Traditional desktop (Linux Mint)", "Linux", "#8AB84A", "Bottom", 40, false, "Manual", false, true, 95, true, 6, "Scale", new[]{"Cinnamon Panel","Menu","Applets"}),
+        new("i3 Tiling", "Keyboard-driven tiling WM", "Linux", "#285577", "Bottom", 24, false, "i3-like", false, false, 100, false, 0, "Fade", new[]{"i3bar","Auto Tiling","Keyboard Only","Workspaces"}),
+        new("Hyprland", "Eye-candy tiling compositor", "Linux", "#00E5FF", "Top", 32, false, "Auto", true, true, 85, true, 12, "MagicLamp", new[]{"Waybar","Wobbly","Blur","Animations","Auto Tile"}),
+        new("macOS Sonoma", "Apple-inspired top bar + dock", "macOS", "#007AFF", "Top", 28, true, "Manual", false, true, 90, true, 10, "MagicLamp", new[]{"Menu Bar","Dock","Global Menu","Mission Control"}),
+        new("Cyberpunk Neon", "Maximum neon effects", "Custom", "#00E5FF", "Bottom", 48, true, "Manual", true, true, 88, true, 12, "Burn", new[]{"Neon Dock","Glow","Wobbly","Transparency"}),
+        new("Glassmorphism", "Frosted glass everywhere", "Custom", "#FFFFFF", "Bottom", 48, true, "Manual", false, true, 75, true, 16, "Scale", new[]{"Glass Panels","Blur","Light Borders"}),
+        new("Material You", "Google Material Design 3", "Custom", "#6750A4", "Bottom", 56, false, "Manual", false, true, 95, true, 20, "Scale", new[]{"Material Panel","Dynamic Color","Elevation"}),
+        new("Minimalist Rice", "Ultra-minimal terminal focus", "Custom", "#BD93F9", "Top", 20, false, "Auto", false, true, 88, true, 8, "Fade", new[]{"Polybar","Gaps","No Decorations","Rofi"}),
+        new("Retro Terminal", "Green CRT aesthetic", "Custom", "#00FF00", "Bottom", 32, false, "Manual", false, false, 100, false, 0, "Fade", new[]{"Pixel Font","CRT Effect","Green on Black"}),
+        new("Nord Cozy", "Warm Nord color scheme", "Custom", "#88C0D0", "Top", 32, false, "Manual", false, true, 93, true, 10, "Scale", new[]{"Nord Colors","Rounded","Cozy Gaps"}),
     };
-
-    public static Preset Find(string name) =>
-        All.FirstOrDefault(p => p.Name == name) ?? All[0];
-
-    public static void Apply(Preset preset)
+    public static DE Find(string n) => All.FirstOrDefault(p => p.Name == n) ?? All[0];
+    public static void Apply(DE p)
     {
         var c = AppConfig.Current;
-        c.ActiveEnvironment = preset.Name;
-        c.PanelPosition = preset.PanelPos;
-        c.PanelSize = preset.PanelSz;
-        c.DockMode = preset.Dock;
-        c.GlobalMenuEnabled = preset.GlobalMenu;
-        c.AccentColor = preset.Accent;
-        c.ThemeName = preset.Theme;
-        c.TilingMode = preset.TilingMode;
-        c.WobblyEnabled = preset.Wobbly;
-        c.TransparencyEnabled = preset.Transparency;
-        c.DefaultOpacity = preset.Opacity;
-        c.RoundedCorners = preset.RoundCorners;
-        c.CornerRadius = preset.CornerRad;
-        c.MinimizeAnimation = preset.MinAnim;
-        c.KeyboardDriven = preset.TilingMode == "i3-like";
+        c.ActiveEnvironment = p.Name; c.PanelPosition = p.Panel; c.PanelSize = p.PanelSz;
+        c.DockMode = p.Dock; c.AccentColor = p.Accent; c.TilingMode = p.Tiling;
+        c.WobblyEnabled = p.Wobbly; c.TransparencyEnabled = p.Transp;
+        c.DefaultOpacity = p.Opacity; c.RoundedCorners = p.Round; c.CornerRadius = p.Radius;
+        c.MinimizeAnimation = p.MinAnim; c.DarkMode = true;
         AppConfig.Save();
+        Engines.ApplyAccent(); Engines.ApplyDarkMode();
+        if (p.Wobbly) WobblyManager.Start(); else WobblyManager.Stop();
     }
 }
 
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// ICON PACKS
+// ENGINES — actually apply Win32/DWM/Registry changes
 // ═══════════════════════════════════════════════════════════════════════════════
-static class IconPacks
+static class Engines
 {
-    public record Pack(string Name, string Description, string Style,
-        string PreviewColor, string[] Samples, bool IsInstalled);
-
-    public static Pack[] GetAvailable() => new[]
-    {
-        new Pack("Default Windows", "Stock Windows 11 Fluent icons", "Fluent",
-            "#0078D4", new[] { "\uE80F", "\uE838", "\uE8B7", "\uE756" }, true),
-        new Pack("Papirus", "Modern flat icon theme for Linux", "Flat",
-            "#4CAF50", new[] { "\uE838", "\uE80F", "\uE774", "\uE8B7" }, false),
-        new Pack("Tela", "Best flat icon theme with vivid colors", "Flat",
-            "#FF5722", new[] { "\uE80F", "\uE838", "\uE774", "\uE756" }, false),
-        new Pack("Numix Circle", "Circle-based modern icons", "Circle",
-            "#F44336", new[] { "\uE80F", "\uE838", "\uE774", "\uE8B7" }, false),
-        new Pack("Candy", "Sweet gradient candy-colored icons", "Gradient",
-            "#E040FB", new[] { "\uE80F", "\uE838", "\uE774", "\uE756" }, false),
-        new Pack("Whitesur", "macOS Big Sur styled icon pack", "macOS",
-            "#007AFF", new[] { "\uE80F", "\uE838", "\uE774", "\uE8B7" }, false),
-        new Pack("Reversal", "Colorful round icons with dark backgrounds", "Circle",
-            "#00BCD4", new[] { "\uE80F", "\uE838", "\uE774", "\uE756" }, false),
-        new Pack("Kora", "Semi-flat with soft shadows", "Semi-Flat",
-            "#795548", new[] { "\uE80F", "\uE838", "\uE774", "\uE8B7" }, false),
-        new Pack("Breeze", "KDE Plasma default icon theme", "KDE",
-            "#1D99F3", new[] { "\uE80F", "\uE838", "\uE774", "\uE756" }, false),
-        new Pack("Adwaita", "GNOME default monochrome icons", "GNOME",
-            "#FFFFFF", new[] { "\uE80F", "\uE838", "\uE774", "\uE8B7" }, false),
-        new Pack("Cyberpunk Neon", "Glowing neon outlined icons", "Neon",
-            "#00E5FF", new[] { "\uE80F", "\uE838", "\uE774", "\uE756" }, false),
-        new Pack("Pixel Perfect", "8-bit retro pixel art icons", "Pixel",
-            "#00FF00", new[] { "\uE80F", "\uE838", "\uE774", "\uE8B7" }, false),
-    };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CURSOR THEMES
-// ═══════════════════════════════════════════════════════════════════════════════
-static class CursorThemes
-{
-    public record CursorTheme(string Name, string Description, string Color);
-
-    public static CursorTheme[] All => new[]
-    {
-        new CursorTheme("Default", "Windows 11 default cursor", "#FFFFFF"),
-        new CursorTheme("Breeze", "KDE Plasma cursor", "#1D99F3"),
-        new CursorTheme("Adwaita", "GNOME default cursor", "#FFFFFF"),
-        new CursorTheme("DMZ-Black", "Clean black cursor", "#000000"),
-        new CursorTheme("Bibata Modern", "Round modern cursor", "#000000"),
-        new CursorTheme("Bibata Neon", "Neon glowing cursor", "#00E5FF"),
-        new CursorTheme("Capitaine", "macOS-inspired cursor", "#FFFFFF"),
-        new CursorTheme("Oreo Spark", "Animated spark cursor", "#FF0090"),
-        new CursorTheme("Vimix", "Flat colorful cursor", "#4CAF50"),
-        new CursorTheme("Pixel Retro", "8-bit pixel cursor", "#00FF00"),
-    };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN FORM — the full application UI
-// ═══════════════════════════════════════════════════════════════════════════════
-sealed class MainForm : Form
-{
-    readonly Panel _sidebar;
-    readonly Panel _content;
-    readonly Panel _titleBar;
-    readonly Label _titleLabel;
-    readonly Label _subtitleLabel;
-    readonly List<SidebarItem> _navItems = new();
-    Panel _activePanel;
-    SidebarItem _activeNav;
-    bool _dragging;
-    Point _dragStart;
-    System.Windows.Forms.Timer _glowTimer;
-    float _glowPhase = 0;
-
-    struct SidebarItem
-    {
-        public Panel Panel;
-        public Label Icon;
-        public Label Text;
-        public string Name;
-        public string Glyph;
-        public Func<Panel> Builder;
-    }
-
-    public MainForm()
-    {
-        Text = "LinuxifyWindows";
-        Size = new Size(1180, 760);
-        MinimumSize = new Size(960, 600);
-        FormBorderStyle = FormBorderStyle.None;
-        StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Theme.BgDeep;
-        DoubleBuffered = true;
-
-        // ── Custom Title Bar ──
-        _titleBar = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 38,
-            BackColor = Color.FromArgb(10, 12, 24),
-        };
-        _titleBar.Paint += TitleBar_Paint;
-        _titleBar.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) { _dragging = true; _dragStart = e.Location; } };
-        _titleBar.MouseUp += (_, _) => _dragging = false;
-        _titleBar.MouseMove += (_, e) => { if (_dragging) Location = new Point(Location.X + e.X - _dragStart.X, Location.Y + e.Y - _dragStart.Y); };
-
-        var titleIcon = new Label
-        {
-            Text = "\u25C8",
-            Font = new Font("Segoe UI", 14f),
-            ForeColor = Theme.Accent,
-            Location = new Point(12, 5),
-            AutoSize = true,
-        };
-        _titleBar.Controls.Add(titleIcon);
-
-        _titleLabel = new Label
-        {
-            Text = "LINUXIFY",
-            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-            ForeColor = Theme.Accent,
-            Location = new Point(36, 4),
-            AutoSize = true,
-        };
-        _titleBar.Controls.Add(_titleLabel);
-
-        _subtitleLabel = new Label
-        {
-            Text = "WINDOWS",
-            Font = new Font("Segoe UI", 10f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(110, 4),
-            AutoSize = true,
-        };
-        _titleBar.Controls.Add(_subtitleLabel);
-
-        // Window controls
-        var btnClose = MakeTitleBtn("\u2715", 0);
-        btnClose.Click += (_, _) => Close();
-        btnClose.MouseEnter += (_, _) => btnClose.BackColor = Theme.Danger;
-        btnClose.MouseLeave += (_, _) => btnClose.BackColor = Color.Transparent;
-
-        var btnMax = MakeTitleBtn("\u25A1", 1);
-        btnMax.Click += (_, _) => WindowState = WindowState == FormWindowState.Maximized
-            ? FormWindowState.Normal : FormWindowState.Maximized;
-
-        var btnMin = MakeTitleBtn("\u2500", 2);
-        btnMin.Click += (_, _) => WindowState = FormWindowState.Minimized;
-
-        _titleBar.Controls.Add(btnClose);
-        _titleBar.Controls.Add(btnMax);
-        _titleBar.Controls.Add(btnMin);
-
-        // ── Sidebar ──
-        _sidebar = new Panel
-        {
-            Dock = DockStyle.Left,
-            Width = 220,
-            BackColor = Theme.BgDark,
-        };
-        _sidebar.Paint += Sidebar_Paint;
-
-        // ── Content Area ──
-        _content = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.BgDeep,
-            Padding = new Padding(0),
-            AutoScroll = true,
-        };
-
-        // Dock order: last added docks first.
-        // Add Fill first so it docks last and gets remaining space.
-        Controls.Add(_content);
-        Controls.Add(_sidebar);
-        Controls.Add(_titleBar);
-
-        // ── Add Navigation Items ──
-        AddNav("\uE80F", "Desktop Environments", () => BuildDesktopEnvPanel());
-        AddNav("\uE771", "Window Effects", () => BuildWindowEffectsPanel());
-        AddNav("\uE790", "Themes & Appearance", () => BuildThemesPanel());
-        AddNav("\uECAD", "Window Tiling", () => BuildTilingPanel());
-        AddNav("\uE8B5", "Icon Packs", () => BuildIconPacksPanel());
-        AddNav("\uE7F4", "Cursor Themes", () => BuildCursorPanel());
-        AddNav("\uE8D6", "Fonts", () => BuildFontsPanel());
-        AddNav("\uE7F7", "Panels & Docks", () => BuildPanelsPanel());
-        AddNav("\uE7AC", "Wallpaper", () => BuildWallpaperPanel());
-        AddNav("\uE71D", "Desktop Widgets", () => BuildWidgetsPanel());
-        AddNav("\uE770", "Wobbly Windows", () => BuildWobblyPanel());
-        AddNav("\uE7E8", "Transparency", () => BuildTransparencyPanel());
-        AddNav("\uE765", "Boot & Login", () => BuildBootPanel());
-        AddNav("\uE92C", "Keyboard Shortcuts", () => BuildKeyboardPanel());
-        AddNav("\uE713", "Settings", () => BuildSettingsPanel());
-
-        // Select first nav
-        if (_navItems.Count > 0) SelectNav(_navItems[0]);
-
-        // ── Glow animation ──
-        _glowTimer = new System.Windows.Forms.Timer { Interval = 40 };
-        _glowTimer.Tick += (_, _) =>
-        {
-            _glowPhase += 0.03f;
-            _sidebar.Invalidate();
-            _titleBar.Invalidate();
-        };
-        _glowTimer.Start();
-
-        Resize += (_, _) => RepositionTitleButtons();
-        RepositionTitleButtons();
-    }
-
-    Label MakeTitleBtn(string text, int index)
-    {
-        return new Label
-        {
-            Text = text,
-            Font = new Font("Segoe UI", 10f),
-            ForeColor = Theme.TextSecondary,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Size = new Size(38, 38),
-            Tag = index,
-            Cursor = Cursors.Hand,
-        };
-    }
-
-    void RepositionTitleButtons()
-    {
-        foreach (Control c in _titleBar.Controls)
-        {
-            if (c.Tag is int idx)
-                c.Location = new Point(Width - 38 * (idx + 1), 0);
-        }
-    }
-
-    void TitleBar_Paint(object sender, PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        float glow = (float)(Math.Sin(_glowPhase) * 0.3 + 0.7);
-        using var pen = new Pen(Color.FromArgb((int)(40 * glow), Theme.Accent), 1);
-        g.DrawLine(pen, 0, _titleBar.Height - 1, _titleBar.Width, _titleBar.Height - 1);
-    }
-
-    void Sidebar_Paint(object sender, PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        float glow = (float)(Math.Sin(_glowPhase * 0.7) * 0.5 + 0.5);
-        using var pen = new Pen(Color.FromArgb((int)(20 + 20 * glow), Theme.Accent), 1);
-        g.DrawLine(pen, _sidebar.Width - 1, 0, _sidebar.Width - 1, _sidebar.Height);
-    }
-
-    void AddNav(string glyph, string name, Func<Panel> builder)
-    {
-        int y = 20 + _navItems.Count * 40;
-        var panel = new Panel
-        {
-            Location = new Point(0, y),
-            Size = new Size(220, 38),
-            BackColor = Color.Transparent,
-            Cursor = Cursors.Hand,
-        };
-
-        var icon = new Label
-        {
-            Text = glyph,
-            Font = new Font("Segoe MDL2 Assets", 11f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(16, 8),
-            AutoSize = true,
-        };
-
-        var label = new Label
-        {
-            Text = name,
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(44, 9),
-            AutoSize = true,
-        };
-
-        var item = new SidebarItem
-        {
-            Panel = panel,
-            Icon = icon,
-            Text = label,
-            Name = name,
-            Glyph = glyph,
-            Builder = builder,
-        };
-
-        EventHandler click = (_, _) => SelectNav(item);
-        panel.Click += click;
-        icon.Click += click;
-        label.Click += click;
-        icon.Cursor = Cursors.Hand;
-        label.Cursor = Cursors.Hand;
-
-        panel.MouseEnter += (_, _) =>
-        {
-            if (_activeNav.Name != item.Name)
-                panel.BackColor = Theme.BgHover;
-        };
-        panel.MouseLeave += (_, _) =>
-        {
-            if (_activeNav.Name != item.Name)
-                panel.BackColor = Color.Transparent;
-        };
-
-        panel.Controls.Add(icon);
-        panel.Controls.Add(label);
-        _sidebar.Controls.Add(panel);
-        _navItems.Add(item);
-    }
-
-    void SelectNav(SidebarItem item)
-    {
-        // Deselect previous
-        if (_activeNav.Panel != null)
-        {
-            _activeNav.Panel.BackColor = Color.Transparent;
-            _activeNav.Icon.ForeColor = Theme.TextSecondary;
-            _activeNav.Text.ForeColor = Theme.TextSecondary;
-        }
-
-        // Select new
-        item.Panel.BackColor = Theme.BgActive;
-        item.Icon.ForeColor = Theme.Accent;
-        item.Text.ForeColor = Theme.TextPrimary;
-        _activeNav = item;
-
-        // Build content
-        _content.AutoScroll = false;
-        _content.Controls.Clear();
-        _activePanel = item.Builder();
-        _activePanel.Dock = DockStyle.Fill;
-        _content.Controls.Add(_activePanel);
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        var g = e.Graphics;
-        float glow = (float)(Math.Sin(_glowPhase) * 0.5 + 0.5);
-        using var pen = new Pen(Color.FromArgb((int)(30 + 40 * glow), Theme.Accent), 2);
-        g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // UI BUILDER HELPERS
-    // ═══════════════════════════════════════════════════════════════════════════
-    static Panel MakeScrollPanel()
-    {
-        var p = new Panel { AutoScroll = true, BackColor = Theme.BgDeep };
-        return p;
-    }
-
-    // Call after adding all controls to a scroll panel so scroll range is correct
-    static void FinalizeScrollPanel(Panel panel)
-    {
-        int maxY = 0;
-        foreach (Control c in panel.Controls)
-        {
-            int bottom = c.Top + c.Height + 20;
-            if (bottom > maxY) maxY = bottom;
-        }
-        panel.AutoScrollMinSize = new Size(0, maxY);
-    }
-
-    static Label MakeHeader(string text, int y)
-    {
-        return new Label
-        {
-            Text = text,
-            Font = new Font("Segoe UI", 18f, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(24, y),
-            AutoSize = true,
-        };
-    }
-
-    static Label MakeSubheader(string text, int y)
-    {
-        return new Label
-        {
-            Text = text,
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(24, y),
-            AutoSize = true,
-        };
-    }
-
-    static Label MakeSectionHeader(string text, int y)
-    {
-        return new Label
-        {
-            Text = text,
-            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-            ForeColor = Theme.Accent,
-            Location = new Point(24, y),
-            AutoSize = true,
-        };
-    }
-
-    static Panel MakeCard(int x, int y, int w, int h)
-    {
-        var card = new Panel
-        {
-            Location = new Point(x, y),
-            Size = new Size(w, h),
-            BackColor = Theme.BgCard,
-            Anchor = w > 400
-                ? AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-                : AnchorStyles.Top | AnchorStyles.Left,
-        };
-        card.Paint += (_, e) =>
-        {
-            using var pen = new Pen(Theme.Border, 1);
-            e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
-        };
-        return card;
-    }
-
-    static CheckBox MakeToggle(string text, bool initial, int x, int y, Action<bool> onChange)
-    {
-        var cb = new CheckBox
-        {
-            Text = text,
-            Checked = initial,
-            ForeColor = Theme.TextPrimary,
-            Font = new Font("Segoe UI", 9.5f),
-            Location = new Point(x, y),
-            AutoSize = true,
-            FlatStyle = FlatStyle.Flat,
-        };
-        cb.CheckedChanged += (_, _) => { onChange(cb.Checked); AppConfig.Save(); };
-        return cb;
-    }
-
-    static TrackBar MakeSlider(int min, int max, int value, int x, int y, int w, Action<int> onChange)
-    {
-        var slider = new TrackBar
-        {
-            Minimum = min,
-            Maximum = max,
-            Value = Math.Clamp(value, min, max),
-            TickStyle = TickStyle.None,
-            Location = new Point(x, y),
-            Size = new Size(w, 30),
-            BackColor = Theme.BgCard,
-        };
-        slider.ValueChanged += (_, _) => { onChange(slider.Value); AppConfig.Save(); };
-        return slider;
-    }
-
-    static Label MakeSliderLabel(string text, int value, string unit, int x, int y)
-    {
-        return new Label
-        {
-            Text = $"{text}: {value}{unit}",
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(x, y),
-            AutoSize = true,
-        };
-    }
-
-    static ComboBox MakeDropdown(string[] items, string selected, int x, int y, int w, Action<string> onChange)
-    {
-        var combo = new ComboBox
-        {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Items = { },
-            Location = new Point(x, y),
-            Size = new Size(w, 28),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Theme.BgCard,
-            ForeColor = Theme.TextPrimary,
-            Font = new Font("Segoe UI", 9.5f),
-        };
-        foreach (var item in items) combo.Items.Add(item);
-        combo.SelectedItem = selected;
-        combo.SelectedIndexChanged += (_, _) =>
-        {
-            if (combo.SelectedItem is string s) { onChange(s); AppConfig.Save(); }
-        };
-        return combo;
-    }
-
-    static Button MakeButton(string text, int x, int y, int w, int h, Color bg, Color fg, Action onClick)
-    {
-        var btn = new Button
-        {
-            Text = text,
-            Location = new Point(x, y),
-            Size = new Size(w, h),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = bg,
-            ForeColor = fg,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-            Cursor = Cursors.Hand,
-        };
-        btn.FlatAppearance.BorderColor = fg;
-        btn.FlatAppearance.BorderSize = 1;
-        btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, fg);
-        btn.Click += (_, _) => onClick();
-        return btn;
-    }
-
-    static Button MakeActionButton(string text, int x, int y, Action onClick)
-    {
-        return MakeButton(text, x, y, 160, 34, Theme.BgCard, Theme.Accent, onClick);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DESKTOP ENVIRONMENTS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildDesktopEnvPanel()
-    {
-        var panel = MakeScrollPanel();
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Desktop Environments", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Switch between completely different UI layouts — one click to transform Windows", y));
-        y += 30;
-
-        // Active environment badge
-        var activeBadge = new Label
-        {
-            Text = $"  ACTIVE: {AppConfig.Current.ActiveEnvironment}  ",
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            ForeColor = Theme.BgDeep,
-            BackColor = Theme.Accent,
-            Location = new Point(24, y),
-            AutoSize = true,
-            Padding = new Padding(8, 4, 8, 4),
-        };
-        panel.Controls.Add(activeBadge);
-        y += 38;
-
-        // Category tabs
-        string[] categories = { "All", "Linux", "macOS", "Windows", "Custom" };
-        var tabPanel = new Panel { Location = new Point(24, y), Size = new Size(800, 32), BackColor = Color.Transparent };
-        int tx = 0;
-        foreach (var cat in categories)
-        {
-            var catBtn = new Label
-            {
-                Text = cat,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = cat == "All" ? Theme.Accent : Theme.TextSecondary,
-                BackColor = cat == "All" ? Theme.BgActive : Color.Transparent,
-                Location = new Point(tx, 0),
-                Size = new Size(80, 28),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand,
-            };
-            catBtn.Click += (_, _) =>
-            {
-                foreach (Control c in tabPanel.Controls)
-                {
-                    if (c is Label l)
-                    {
-                        l.ForeColor = Theme.TextSecondary;
-                        l.BackColor = Color.Transparent;
-                    }
-                }
-                catBtn.ForeColor = Theme.Accent;
-                catBtn.BackColor = Theme.BgActive;
-                // Filter environment cards
-                FilterEnvCards(panel, cat == "All" ? null : cat);
-            };
-            tabPanel.Controls.Add(catBtn);
-            tx += 86;
-        }
-        panel.Controls.Add(tabPanel);
-        y += 42;
-
-        // Environment cards — use a tag prefix so we can find them for filtering
-        int cardY = y;
-        foreach (var env in DesktopEnvironments.All)
-        {
-            var card = MakeEnvCard(env, 24, cardY, 870);
-            card.Tag = "ENV:" + env.Category;
-            panel.Controls.Add(card);
-            cardY += 110;
-        }
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    void FilterEnvCards(Panel panel, string category)
-    {
-        // Find the Y position of the first card (after the header/tabs)
-        int baseY = -1;
-        foreach (Control c in panel.Controls)
-        {
-            if (c.Tag is string tag && tag.StartsWith("ENV:"))
-            {
-                if (baseY < 0) baseY = c.Top;
-                break;
-            }
-        }
-        if (baseY < 0) baseY = 170;
-
-        int curY = baseY;
-        foreach (Control c in panel.Controls)
-        {
-            if (c.Tag is string tag && tag.StartsWith("ENV:"))
-            {
-                string cat = tag.Substring(4);
-                bool show = category == null || cat == category;
-                c.Visible = show;
-                if (show)
-                {
-                    c.Top = curY;
-                    curY += c.Height + 10;
-                }
-            }
-        }
-        FinalizeScrollPanel(panel);
-    }
-
-    Panel MakeEnvCard(DesktopEnvironments.Preset env, int x, int y, int w)
-    {
-        bool isActive = AppConfig.Current.ActiveEnvironment == env.Name;
-        var card = new Panel
-        {
-            Location = new Point(x, y),
-            Size = new Size(w, 100),
-            BackColor = isActive ? Color.FromArgb(20, 30, 55) : Theme.BgCard,
-            Tag = env.Category,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-        };
-        card.Paint += (_, e) =>
-        {
-            using var pen = new Pen(isActive ? Theme.Accent : Theme.Border, isActive ? 2 : 1);
-            e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
-        };
-
-        // Color swatch
-        Color accentColor;
-        try { accentColor = ColorTranslator.FromHtml(env.Accent); }
-        catch { accentColor = Theme.Accent; }
-
-        var swatch = new Panel
-        {
-            Location = new Point(16, 16),
-            Size = new Size(48, 48),
-            BackColor = accentColor,
-        };
-        swatch.Paint += (_, e) =>
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var brush = new SolidBrush(accentColor);
-            e.Graphics.FillEllipse(brush, 2, 2, 44, 44);
-        };
-        card.Controls.Add(swatch);
-
-        // Name
-        card.Controls.Add(new Label
-        {
-            Text = env.Name,
-            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
-            ForeColor = isActive ? Theme.Accent : Theme.TextPrimary,
-            Location = new Point(76, 12),
-            AutoSize = true,
-        });
-
-        // Description
-        card.Controls.Add(new Label
-        {
-            Text = env.Description,
-            Font = new Font("Segoe UI", 8.5f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(76, 34),
-            AutoSize = true,
-        });
-
-        // Features
-        int fx = 76;
-        int fy = 56;
-        foreach (var feat in env.Features.Take(7))
-        {
-            var tag = new Label
-            {
-                Text = feat,
-                Font = new Font("Segoe UI", 7.5f),
-                ForeColor = Theme.AccentDim,
-                BackColor = Color.FromArgb(15, Theme.Accent),
-                Location = new Point(fx, fy),
-                AutoSize = true,
-                Padding = new Padding(4, 2, 4, 2),
-            };
-            card.Controls.Add(tag);
-            fx += TextRenderer.MeasureText(feat, tag.Font).Width + 16;
-            if (fx > w - 220)
-            {
-                fx = 76;
-                fy += 22;
-            }
-        }
-
-        // Category badge
-        card.Controls.Add(new Label
-        {
-            Text = env.Category,
-            Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-            ForeColor = Theme.TextDim,
-            Location = new Point(76, 80),
-            AutoSize = true,
-        });
-
-        // Apply button — anchored to right edge
-        var applyBtn = MakeButton(
-            isActive ? "\u2714  ACTIVE" : "APPLY",
-            w - 140, 32, 120, 34,
-            isActive ? Color.FromArgb(0, 60, 70) : Theme.BgPanel,
-            isActive ? Theme.Success : Theme.Accent,
-            () =>
-            {
-                DesktopEnvironments.Apply(env);
-                SelectNav(_navItems[0]); // rebuild panel
-                MessageBox.Show(
-                    $"Desktop environment switched to: {env.Name}\n\n" +
-                    $"Theme: {env.Theme}\n" +
-                    $"Panel: {env.PanelPos} ({env.PanelSz}px)\n" +
-                    $"Tiling: {env.TilingMode}\n" +
-                    $"Effects: {string.Join(", ", env.Features.Take(4))}",
-                    "Environment Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            });
-        applyBtn.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        if (isActive) applyBtn.Enabled = false;
-        card.Controls.Add(applyBtn);
-
-        return card;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // WINDOW EFFECTS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildWindowEffectsPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Window Effects", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Animations, decorations, shadows, and visual effects for all windows", y));
-        y += 40;
-
-        // ── Rounded Corners ──
-        panel.Controls.Add(MakeSectionHeader("Window Corners", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Rounded window corners", c.RoundedCorners, 40, y,
-            v => c.RoundedCorners = v));
-        y += 30;
-
-        var radiusLabel = MakeSliderLabel("Corner radius", c.CornerRadius, "px", 40, y);
-        panel.Controls.Add(radiusLabel);
-        y += 22;
-        panel.Controls.Add(MakeSlider(0, 24, c.CornerRadius, 40, y, 400, v =>
-        {
-            c.CornerRadius = v;
-            radiusLabel.Text = $"Corner radius: {v}px";
-        }));
-        y += 42;
-
-        // ── Drop Shadows ──
-        panel.Controls.Add(MakeSectionHeader("Shadows & Depth", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Window drop shadows", c.DropShadows, 40, y,
-            v => c.DropShadows = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Elevated active window", true, 40, y, _ => { }));
-        y += 38;
-
-        // ── Minimize Animation ──
-        panel.Controls.Add(MakeSectionHeader("Minimize Animation", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Animated minimize/restore", c.AnimatedMinimize, 40, y,
-            v => c.AnimatedMinimize = v));
-        y += 30;
-
-        panel.Controls.Add(new Label
-        {
-            Text = "Animation style:",
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(40, y),
-            AutoSize = true,
-        });
-        panel.Controls.Add(MakeDropdown(
-            new[] { "Scale", "MagicLamp", "Burn", "Fade", "Slide", "Glitch" },
-            c.MinimizeAnimation, 170, y - 2, 160,
-            v => c.MinimizeAnimation = v));
-        y += 38;
-
-        // Animation preview cards
-        string[] anims = { "Scale", "MagicLamp", "Burn", "Fade", "Slide", "Glitch" };
-        string[] animDesc =
-        {
-            "Classic scale down (Windows/GNOME default)",
-            "Genie effect — window shrinks into dock (macOS/KDE)",
-            "Window burns away with fire particles (Compiz)",
-            "Window fades to transparent (i3/Sway)",
-            "Window slides off screen edge (Cinnamon)",
-            "Cyberpunk digital glitch disintegration"
-        };
-        int ax = 40;
-        for (int i = 0; i < anims.Length; i++)
-        {
-            bool selected = c.MinimizeAnimation == anims[i];
-            var animCard = MakeCard(ax, y, 130, 80);
-            animCard.BackColor = selected ? Color.FromArgb(20, 30, 55) : Theme.BgCard;
-            animCard.Controls.Add(new Label
-            {
-                Text = anims[i],
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = selected ? Theme.Accent : Theme.TextPrimary,
-                Location = new Point(8, 8),
-                AutoSize = true,
-            });
-            animCard.Controls.Add(new Label
-            {
-                Text = animDesc[i].Length > 30 ? animDesc[i][..30] + "..." : animDesc[i],
-                Font = new Font("Segoe UI", 7.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(8, 30),
-                Size = new Size(114, 40),
-            });
-            string animName = anims[i];
-            animCard.Cursor = Cursors.Hand;
-            animCard.Click += (_, _) =>
-            {
-                c.MinimizeAnimation = animName;
-                AppConfig.Save();
-                SelectNav(_navItems[1]);
-            };
-            panel.Controls.Add(animCard);
-            ax += 138;
-            if (ax > 700) { ax = 40; y += 90; }
-        }
-        y += 100;
-
-        // ── Desktop Effects ──
-        panel.Controls.Add(MakeSectionHeader("Desktop Effects", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Desktop zoom (Super + scroll)", c.DesktopZoom, 40, y,
-            v => c.DesktopZoom = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Picture-in-Picture mode (always-on-top video)", c.PictureInPicture, 40, y,
-            v => c.PictureInPicture = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Desktop cube (3D workspace switching)", c.DesktopCube, 40, y,
-            v => c.DesktopCube = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("3D workspace transitions", c.Workspace3D, 40, y,
-            v => c.Workspace3D = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Animated workspace switching", c.AnimatedWorkspaces, 40, y,
-            v => c.AnimatedWorkspaces = v));
-        y += 38;
-
-        // ── Workspace Count ──
-        var wsLabel = MakeSliderLabel("Virtual workspaces", c.WorkspaceCount, "", 40, y);
-        panel.Controls.Add(wsLabel);
-        y += 22;
-        panel.Controls.Add(MakeSlider(1, 12, c.WorkspaceCount, 40, y, 400, v =>
-        {
-            c.WorkspaceCount = v;
-            wsLabel.Text = $"Virtual workspaces: {v}";
-        }));
-        y += 50;
-
-        // Apply button
-        panel.Controls.Add(MakeButton("APPLY WINDOW EFFECTS", 40, y, 200, 40,
-            Theme.BgPanel, Theme.Accent,
-            () =>
-            {
-                AppConfig.Save();
-                WindowEffectsEngine.ApplyAll();
-                MessageBox.Show("Window effects applied!\n\nNote: Some effects require running the background service.",
-                    "Effects Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }));
-        y += 60;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // THEMES & APPEARANCE PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildThemesPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Themes & Appearance", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Colors, accent customization, dark mode, and application-specific theming", y));
-        y += 40;
-
-        // ── Dark/Light Mode ──
-        panel.Controls.Add(MakeSectionHeader("System Theme", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Dark mode (system-wide)", c.DarkMode, 40, y,
-            v => c.DarkMode = v));
-        y += 38;
-
-        // ── Accent Color ──
-        panel.Controls.Add(MakeSectionHeader("Accent Color", y));
-        y += 28;
-
-        string[] presetColors =
-        {
-            "#00E5FF", "#FF0090", "#6750A4", "#1A73E8", "#00BCD4",
-            "#4CAF50", "#FF5722", "#E91E63", "#FFC107", "#00FF88",
-            "#BD93F9", "#FF6E40", "#1D99F3", "#8AB84A", "#795548",
-            "#88C0D0", "#007AFF", "#F44336", "#9C27B0", "#FFFFFF"
-        };
-
-        int cx = 40;
-        foreach (var color in presetColors)
-        {
-            Color col;
-            try { col = ColorTranslator.FromHtml(color); }
-            catch { continue; }
-
-            bool selected = c.AccentColor.Equals(color, StringComparison.OrdinalIgnoreCase);
-            var swatch = new Panel
-            {
-                Location = new Point(cx, y),
-                Size = new Size(34, 34),
-                BackColor = col,
-                Cursor = Cursors.Hand,
-            };
-            swatch.Paint += (_, e) =>
-            {
-                if (selected)
-                {
-                    using var pen = new Pen(Color.White, 2);
-                    e.Graphics.DrawRectangle(pen, 1, 1, 31, 31);
-                    e.Graphics.DrawString("\u2714", new Font("Segoe UI", 12f, FontStyle.Bold),
-                        Brushes.White, 6, 5);
-                }
-            };
-            string colorVal = color;
-            swatch.Click += (_, _) =>
-            {
-                c.AccentColor = colorVal;
-                AppConfig.Save();
-                SelectNav(_navItems[2]);
-            };
-            panel.Controls.Add(swatch);
-            cx += 40;
-            if (cx > 820) { cx = 40; y += 40; }
-        }
-        y += 50;
-
-        panel.Controls.Add(MakeButton("CUSTOM COLOR...", 40, y, 160, 34, Theme.BgCard, Theme.Accent, () =>
-        {
-            using var cd = new ColorDialog { FullOpen = true };
-            if (cd.ShowDialog() == DialogResult.OK)
-            {
-                c.AccentColor = $"#{cd.Color.R:X2}{cd.Color.G:X2}{cd.Color.B:X2}";
-                AppConfig.Save();
-                SelectNav(_navItems[2]);
-            }
-        }));
-        y += 48;
-
-        // ── Secondary Accent ──
-        panel.Controls.Add(MakeSectionHeader("Secondary Accent", y));
-        y += 28;
-        panel.Controls.Add(new Label
-        {
-            Text = $"Current: {c.SecondaryAccent}",
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(40, y),
-            AutoSize = true,
-        });
-        panel.Controls.Add(MakeButton("CHANGE", 250, y - 4, 100, 30, Theme.BgCard, Theme.Accent2, () =>
-        {
-            using var cd = new ColorDialog { FullOpen = true };
-            if (cd.ShowDialog() == DialogResult.OK)
-            {
-                c.SecondaryAccent = $"#{cd.Color.R:X2}{cd.Color.G:X2}{cd.Color.B:X2}";
-                AppConfig.Save();
-                SelectNav(_navItems[2]);
-            }
-        }));
-        y += 40;
-
-        // ── Window Borders ──
-        panel.Controls.Add(MakeSectionHeader("Window Borders", y));
-        y += 28;
-
-        var borderLabel = MakeSliderLabel("Border width", c.WindowBorderWidth, "px", 40, y);
-        panel.Controls.Add(borderLabel);
-        y += 22;
-        panel.Controls.Add(MakeSlider(0, 4, c.WindowBorderWidth, 40, y, 300, v =>
-        {
-            c.WindowBorderWidth = v;
-            borderLabel.Text = $"Border width: {v}px";
-        }));
-        y += 42;
-
-        // ── Theme Presets ──
-        panel.Controls.Add(MakeSectionHeader("Theme Presets", y));
-        y += 28;
-
-        string[][] themes =
-        {
-            new[] { "Cyberpunk Neon", "Neon cyan/pink on deep black", "#00E5FF" },
-            new[] { "Adwaita Dark", "GNOME default dark theme", "#3584E4" },
-            new[] { "Breeze Dark", "KDE Plasma default theme", "#1D99F3" },
-            new[] { "Dracula", "Popular dark purple theme", "#BD93F9" },
-            new[] { "Nord", "Arctic, north-inspired colors", "#88C0D0" },
-            new[] { "Gruvbox Dark", "Retro warm dark theme", "#D79921" },
-            new[] { "Catppuccin Mocha", "Soothing pastel dark theme", "#CBA6F7" },
-            new[] { "Tokyo Night", "Clean dark theme inspired by Tokyo", "#7AA2F7" },
-            new[] { "One Dark", "Atom editor inspired theme", "#61AFEF" },
-            new[] { "Solarized Dark", "Ethan Schoonover's precision colors", "#268BD2" },
-            new[] { "Material Oceanic", "Material Design ocean colors", "#009688" },
-            new[] { "Glassmorphism", "Frosted glass with blur", "#FFFFFF" },
-            new[] { "Retro Terminal", "Green-on-black CRT aesthetic", "#00FF00" },
-            new[] { "macOS Monterey", "Apple-inspired dark theme", "#007AFF" },
-            new[] { "Windows Fluent", "Microsoft Fluent Design dark", "#0078D4" },
-        };
-
-        foreach (var t in themes)
-        {
-            bool selected = c.ThemeName == t[0];
-            Color tColor;
-            try { tColor = ColorTranslator.FromHtml(t[2]); }
-            catch { tColor = Theme.Accent; }
-
-            var card = MakeCard(40, y, 860, 44);
-            card.BackColor = selected ? Color.FromArgb(20, 30, 55) : Theme.BgCard;
-
-            var dot = new Panel { Location = new Point(12, 12), Size = new Size(20, 20), BackColor = tColor };
-            dot.Paint += (_, e) =>
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using var brush = new SolidBrush(tColor);
-                e.Graphics.FillEllipse(brush, 0, 0, 19, 19);
-            };
-            card.Controls.Add(dot);
-
-            card.Controls.Add(new Label
-            {
-                Text = t[0],
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = selected ? Theme.Accent : Theme.TextPrimary,
-                Location = new Point(40, 4),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = t[1],
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(40, 22),
-                AutoSize = true,
-            });
-
-            if (selected)
-            {
-                card.Controls.Add(new Label
-                {
-                    Text = "\u2714 ACTIVE",
-                    Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                    ForeColor = Theme.Success,
-                    Location = new Point(760, 12),
-                    AutoSize = true,
-                });
-            }
-            else
-            {
-                string themeName = t[0];
-                var applyBtn = MakeButton("Apply", 770, 6, 70, 30, Theme.BgPanel, Theme.Accent, () =>
-                {
-                    c.ThemeName = themeName;
-                    AppConfig.Save();
-                    SelectNav(_navItems[2]);
-                });
-                card.Controls.Add(applyBtn);
-            }
-
-            panel.Controls.Add(card);
-            y += 52;
-        }
-        y += 20;
-
-        // ── Terminal Theming ──
-        panel.Controls.Add(MakeSectionHeader("Terminal Appearance", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Transparent terminal background", c.TransparentTerminal, 40, y,
-            v => c.TransparentTerminal = v));
-        y += 30;
-
-        var termLabel = MakeSliderLabel("Terminal opacity", c.TerminalOpacity, "%", 40, y);
-        panel.Controls.Add(termLabel);
-        y += 22;
-        panel.Controls.Add(MakeSlider(20, 100, c.TerminalOpacity, 40, y, 400, v =>
-        {
-            c.TerminalOpacity = v;
-            termLabel.Text = $"Terminal opacity: {v}%";
-        }));
-        y += 38;
-        panel.Controls.Add(MakeToggle("Terminal background blur", c.TerminalBlur, 40, y,
-            v => c.TerminalBlur = v));
-        y += 50;
-
-        // Apply
-        panel.Controls.Add(MakeButton("APPLY THEME", 40, y, 200, 40, Theme.BgPanel, Theme.Accent, () =>
-        {
-            AppConfig.Save();
-            ThemeEngine.ApplySystemTheme();
-            MessageBox.Show("Theme settings applied!\n\nAccent color and dark mode changes take effect immediately.\nSome theme changes require a restart of affected applications.",
-                "Theme Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 60;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // WINDOW TILING PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildTilingPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Window Tiling & Snapping", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Automatic and manual window tiling — from snap layouts to full i3-style tiling", y));
-        y += 40;
-
-        panel.Controls.Add(MakeToggle("Enable window tiling", c.TilingEnabled, 40, y,
-            v => c.TilingEnabled = v));
-        y += 38;
-
-        // Tiling mode
-        panel.Controls.Add(MakeSectionHeader("Tiling Mode", y));
-        y += 28;
-
-        string[][] modes =
-        {
-            new[] { "Manual", "Snap windows to edges and corners manually (Windows-style)", "\uE737" },
-            new[] { "Auto", "New windows automatically tile into available space (Hyprland-style)", "\uE8A9" },
-            new[] { "i3-like", "Full keyboard-driven tiling — splits, tabbed, stacked (i3/Sway)", "\uE8C5" },
-        };
-
-        foreach (var mode in modes)
-        {
-            bool selected = c.TilingMode == mode[0];
-            var card = MakeCard(40, y, 860, 60);
-            card.BackColor = selected ? Color.FromArgb(20, 30, 55) : Theme.BgCard;
-            card.Cursor = Cursors.Hand;
-
-            card.Controls.Add(new Label
-            {
-                Text = mode[2],
-                Font = new Font("Segoe MDL2 Assets", 16f),
-                ForeColor = selected ? Theme.Accent : Theme.TextSecondary,
-                Location = new Point(16, 14),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = mode[0],
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-                ForeColor = selected ? Theme.Accent : Theme.TextPrimary,
-                Location = new Point(52, 8),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = mode[1],
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(52, 32),
-                AutoSize = true,
-            });
-
-            if (selected)
-            {
-                card.Controls.Add(new Label
-                {
-                    Text = "\u25C9",
-                    Font = new Font("Segoe UI", 14f),
-                    ForeColor = Theme.Accent,
-                    Location = new Point(820, 16),
-                    AutoSize = true,
-                });
-            }
-
-            string modeName = mode[0];
-            card.Click += (_, _) =>
-            {
-                c.TilingMode = modeName;
-                AppConfig.Save();
-                SelectNav(_navItems[3]);
-            };
-            panel.Controls.Add(card);
-            y += 68;
-        }
-        y += 10;
-
-        // Snapping options
-        panel.Controls.Add(MakeSectionHeader("Snapping Options", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Edge snapping (drag to screen edges)", c.EdgeSnapping, 40, y,
-            v => c.EdgeSnapping = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Quarter snapping (drag to corners)", c.QuarterSnapping, 40, y,
-            v => c.QuarterSnapping = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Smart snapping (snap to other windows)", c.SmartSnapping, 40, y,
-            v => c.SmartSnapping = v));
-        y += 38;
-
-        // Gap size
-        var gapLabel = MakeSliderLabel("Tile gap", c.TileGap, "px", 40, y);
-        panel.Controls.Add(gapLabel);
-        y += 22;
-        panel.Controls.Add(MakeSlider(0, 24, c.TileGap, 40, y, 400, v =>
-        {
-            c.TileGap = v;
-            gapLabel.Text = $"Tile gap: {v}px";
-        }));
-        y += 50;
-
-        // Apply
-        panel.Controls.Add(MakeButton("APPLY TILING SETTINGS", 40, y, 220, 40, Theme.BgPanel, Theme.Accent, () =>
-        {
-            AppConfig.Save();
-            MessageBox.Show("Tiling settings saved!\n\nThe tiling engine will use these settings for new window placements.",
-                "Tiling Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 60;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ICON PACKS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildIconPacksPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Icon Packs", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Replace system icons with Linux icon themes — swap freely and revert anytime", y));
-        y += 40;
-
-        var activeBadge = new Label
-        {
-            Text = $"  ACTIVE: {c.ActiveIconPack}  ",
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            ForeColor = Theme.BgDeep,
-            BackColor = Theme.Accent,
-            Location = new Point(40, y),
-            AutoSize = true,
-            Padding = new Padding(8, 4, 8, 4),
-        };
-        panel.Controls.Add(activeBadge);
-
-        panel.Controls.Add(MakeButton("RESTORE DEFAULT ICONS", 300, y, 200, 30, Theme.BgCard, Theme.Warning, () =>
-        {
-            c.ActiveIconPack = "Default Windows";
-            AppConfig.Save();
-            SelectNav(_navItems[4]);
-            MessageBox.Show("Icons restored to Windows defaults.", "Icons Restored",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 48;
-
-        foreach (var pack in IconPacks.GetAvailable())
-        {
-            bool isActive = c.ActiveIconPack == pack.Name;
-            var card = MakeCard(40, y, 860, 80);
-            card.BackColor = isActive ? Color.FromArgb(20, 30, 55) : Theme.BgCard;
-
-            Color packColor;
-            try { packColor = ColorTranslator.FromHtml(pack.PreviewColor); }
-            catch { packColor = Theme.Accent; }
-
-            // Icon previews (colored squares as placeholder)
-            for (int i = 0; i < 4; i++)
-            {
-                var preview = new Panel
-                {
-                    Location = new Point(16 + i * 40, 16),
-                    Size = new Size(32, 32),
-                    BackColor = Color.FromArgb(50 + i * 30, packColor),
-                };
-                preview.Paint += (_, e) =>
-                {
-                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                    using var brush = new SolidBrush(Color.FromArgb(180, packColor));
-                    e.Graphics.FillRectangle(brush, 4, 4, 24, 24);
-                };
-                card.Controls.Add(preview);
-            }
-
-            card.Controls.Add(new Label
-            {
-                Text = pack.Name,
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-                ForeColor = isActive ? Theme.Accent : Theme.TextPrimary,
-                Location = new Point(180, 10),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = pack.Description,
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(180, 32),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = $"Style: {pack.Style}",
-                Font = new Font("Segoe UI", 8f),
-                ForeColor = Theme.TextDim,
-                Location = new Point(180, 52),
-                AutoSize = true,
-            });
-
-            if (isActive)
-            {
-                card.Controls.Add(new Label
-                {
-                    Text = "\u2714 ACTIVE",
-                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                    ForeColor = Theme.Success,
-                    Location = new Point(700, 28),
-                    AutoSize = true,
-                });
-            }
-            else
-            {
-                string packName = pack.Name;
-                bool installed = pack.IsInstalled;
-                var btn = MakeButton(installed ? "APPLY" : "INSTALL & APPLY", 700, 22, installed ? 100 : 140, 34,
-                    Theme.BgPanel, Theme.Accent, () =>
-                    {
-                        c.ActiveIconPack = packName;
-                        AppConfig.Save();
-                        SelectNav(_navItems[4]);
-                        MessageBox.Show($"Icon pack '{packName}' applied!\n\nIcons will update across the system. Some apps may need a restart.",
-                            "Icons Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    });
-                card.Controls.Add(btn);
-            }
-
-            panel.Controls.Add(card);
-            y += 88;
-        }
-        y += 20;
-
-        // Import custom
-        panel.Controls.Add(MakeButton("IMPORT CUSTOM ICON PACK...", 40, y, 240, 40, Theme.BgCard, Theme.Accent, () =>
-        {
-            using var ofd = new FolderBrowserDialog { Description = "Select icon pack folder" };
-            if (ofd.ShowDialog() == DialogResult.OK)
-            {
-                MessageBox.Show($"Custom icon pack imported from:\n{ofd.SelectedPath}\n\nIcons registered successfully.",
-                    "Import Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-        }));
-        y += 60;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CURSOR THEMES PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildCursorPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Cursor Themes", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Replace the mouse cursor with Linux cursor themes", y));
-        y += 40;
-
-        foreach (var cursor in CursorThemes.All)
-        {
-            bool selected = c.CursorTheme == cursor.Name;
-            var card = MakeCard(40, y, 860, 56);
-            card.BackColor = selected ? Color.FromArgb(20, 30, 55) : Theme.BgCard;
-
-            Color cursorColor;
-            try { cursorColor = ColorTranslator.FromHtml(cursor.Color); }
-            catch { cursorColor = Color.White; }
-
-            // Cursor preview
-            var preview = new Panel
-            {
-                Location = new Point(16, 10),
-                Size = new Size(36, 36),
-                BackColor = Color.Transparent,
-            };
-            preview.Paint += (_, e) =>
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                var points = new[] { new Point(4, 4), new Point(4, 28), new Point(14, 22), new Point(20, 32), new Point(24, 28), new Point(18, 18), new Point(28, 18) };
-                using var brush = new SolidBrush(cursorColor);
-                using var pen = new Pen(Color.FromArgb(100, 0, 0, 0), 1);
-                e.Graphics.FillPolygon(brush, points.Take(3).ToArray());
-                e.Graphics.FillPolygon(brush, new[] { points[0], points[2], points[6] });
-            };
-            card.Controls.Add(preview);
-
-            card.Controls.Add(new Label
-            {
-                Text = cursor.Name,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = selected ? Theme.Accent : Theme.TextPrimary,
-                Location = new Point(60, 8),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = cursor.Description,
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(60, 30),
-                AutoSize = true,
-            });
-
-            if (selected)
-            {
-                card.Controls.Add(new Label
-                {
-                    Text = "\u2714 ACTIVE",
-                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                    ForeColor = Theme.Success,
-                    Location = new Point(760, 16),
-                    AutoSize = true,
-                });
-            }
-            else
-            {
-                string cursorName = cursor.Name;
-                var btn = MakeButton("APPLY", 770, 12, 70, 30, Theme.BgPanel, Theme.Accent, () =>
-                {
-                    c.CursorTheme = cursorName;
-                    AppConfig.Save();
-                    SelectNav(_navItems[5]);
-                });
-                card.Controls.Add(btn);
-            }
-
-            panel.Controls.Add(card);
-            y += 64;
-        }
-        y += 20;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // FONTS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildFontsPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Fonts", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Customize fonts for every UI element — title bars, menus, terminals, and more", y));
-        y += 40;
-
-        // System font
-        panel.Controls.Add(MakeSectionHeader("System UI Font", y));
-        y += 28;
-        string[] uiFonts = { "Segoe UI", "Inter", "Roboto", "SF Pro Display", "Noto Sans", "Ubuntu", "Fira Sans", "Open Sans", "Cantarell", "DejaVu Sans" };
-        panel.Controls.Add(MakeDropdown(uiFonts, c.FontFamily, 40, y, 250, v => c.FontFamily = v));
-
-        var sizeLabel = MakeSliderLabel("Size", c.FontSize, "pt", 310, y + 4);
-        panel.Controls.Add(sizeLabel);
-        panel.Controls.Add(MakeSlider(8, 16, c.FontSize, 370, y, 200, v =>
-        {
-            c.FontSize = v;
-            sizeLabel.Text = $"Size: {v}pt";
-        }));
-        y += 42;
-
-        // Title bar font
-        panel.Controls.Add(MakeSectionHeader("Title Bar Font", y));
-        y += 28;
-        string[] titleFonts = { "Segoe UI Semibold", "Segoe UI Bold", "Inter Bold", "Roboto Medium", "SF Pro Display Bold", "Ubuntu Bold" };
-        panel.Controls.Add(MakeDropdown(titleFonts, c.TitleBarFont, 40, y, 250, v => c.TitleBarFont = v));
-        y += 42;
-
-        // Monospace font
-        panel.Controls.Add(MakeSectionHeader("Terminal / Monospace Font", y));
-        y += 28;
-        string[] monoFonts = { "Cascadia Code", "Fira Code", "JetBrains Mono", "Source Code Pro", "Hack", "Iosevka", "Ubuntu Mono", "DejaVu Sans Mono", "Consolas", "Fantasque Sans Mono" };
-        panel.Controls.Add(MakeDropdown(monoFonts, c.MonospaceFont, 40, y, 250, v => c.MonospaceFont = v));
-        y += 42;
-
-        // Font preview
-        panel.Controls.Add(MakeSectionHeader("Font Preview", y));
-        y += 28;
-
-        var previewCard = MakeCard(40, y, 860, 180);
-        try
-        {
-            previewCard.Controls.Add(new Label
-            {
-                Text = $"UI Font: {c.FontFamily}",
-                Font = new Font(c.FontFamily, 12f),
-                ForeColor = Theme.TextPrimary,
-                Location = new Point(20, 16),
-                AutoSize = true,
-            });
-        }
-        catch
-        {
-            previewCard.Controls.Add(new Label
-            {
-                Text = $"UI Font: {c.FontFamily} (not installed)",
-                Font = new Font("Segoe UI", 12f),
-                ForeColor = Theme.Warning,
-                Location = new Point(20, 16),
-                AutoSize = true,
-            });
-        }
-        previewCard.Controls.Add(new Label
-        {
-            Text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789",
-            Font = new Font("Segoe UI", 10f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(20, 44),
-            AutoSize = true,
-        });
-        previewCard.Controls.Add(new Label
-        {
-            Text = "The quick brown fox jumps over the lazy dog",
-            Font = new Font("Segoe UI", 10f, FontStyle.Italic),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(20, 68),
-            AutoSize = true,
-        });
-        previewCard.Controls.Add(new Label
-        {
-            Text = $"Monospace: {c.MonospaceFont}",
-            Font = new Font("Consolas", 11f),
-            ForeColor = Theme.Accent,
-            Location = new Point(20, 100),
-            AutoSize = true,
-        });
-        previewCard.Controls.Add(new Label
-        {
-            Text = "$ sudo apt install neofetch && neofetch --ascii",
-            Font = new Font("Consolas", 10f),
-            ForeColor = Theme.Success,
-            Location = new Point(20, 126),
-            AutoSize = true,
-        });
-        previewCard.Controls.Add(new Label
-        {
-            Text = "fn main() { println!(\"Hello, Linux!\"); }",
-            Font = new Font("Consolas", 10f),
-            ForeColor = Theme.Accent,
-            Location = new Point(20, 148),
-            AutoSize = true,
-        });
-        panel.Controls.Add(previewCard);
-        y += 200;
-
-        // Apply
-        panel.Controls.Add(MakeButton("APPLY FONTS", 40, y, 200, 40, Theme.BgPanel, Theme.Accent, () =>
-        {
-            AppConfig.Save();
-            MessageBox.Show("Font settings saved!\n\nSystem font changes require a log-off to fully apply.\nTerminal fonts apply to new terminal instances.",
-                "Fonts Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 60;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PANELS & DOCKS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildPanelsPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Panels & Docks", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Add panels on any edge, create macOS-style docks, or use multiple bars simultaneously", y));
-        y += 40;
-
-        panel.Controls.Add(MakeToggle("Enable custom panel/dock system", c.CustomPanelEnabled, 40, y,
-            v => c.CustomPanelEnabled = v));
-        y += 38;
-
-        // Panel position
-        panel.Controls.Add(MakeSectionHeader("Panel Position", y));
-        y += 28;
-
-        string[] positions = { "Top", "Bottom", "Left", "Right" };
-        string[] posIcons = { "\u2B06", "\u2B07", "\u2B05", "\u27A1" };
-        string[] posDesc = { "GNOME/macOS top bar style", "Windows taskbar style", "Unity launcher style", "Right edge panel" };
-        int px = 40;
-        for (int i = 0; i < positions.Length; i++)
-        {
-            bool selected = c.PanelPosition == positions[i];
-            var card = MakeCard(px, y, 200, 70);
-            card.BackColor = selected ? Color.FromArgb(20, 30, 55) : Theme.BgCard;
-            card.Cursor = Cursors.Hand;
-
-            card.Controls.Add(new Label
-            {
-                Text = posIcons[i],
-                Font = new Font("Segoe UI", 16f),
-                ForeColor = selected ? Theme.Accent : Theme.TextSecondary,
-                Location = new Point(12, 8),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = positions[i],
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = selected ? Theme.Accent : Theme.TextPrimary,
-                Location = new Point(44, 10),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = posDesc[i],
-                Font = new Font("Segoe UI", 7.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(12, 42),
-                AutoSize = true,
-            });
-
-            string pos = positions[i];
-            card.Click += (_, _) =>
-            {
-                c.PanelPosition = pos;
-                AppConfig.Save();
-                SelectNav(_navItems[7]);
-            };
-
-            panel.Controls.Add(card);
-            px += 210;
-        }
-        y += 82;
-
-        // Panel size
-        var sizeLabel = MakeSliderLabel("Panel size", c.PanelSize, "px", 40, y);
-        panel.Controls.Add(sizeLabel);
-        y += 22;
-        panel.Controls.Add(MakeSlider(20, 72, c.PanelSize, 40, y, 400, v =>
-        {
-            c.PanelSize = v;
-            sizeLabel.Text = $"Panel size: {v}px";
-        }));
-        y += 42;
-
-        // Panel options
-        panel.Controls.Add(MakeSectionHeader("Panel Behavior", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Auto-hide panel", c.PanelAutoHide, 40, y,
-            v => c.PanelAutoHide = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Dock mode (floating, macOS-style)", c.DockMode, 40, y,
-            v => c.DockMode = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Global application menu (menu bar at top)", c.GlobalMenuEnabled, 40, y,
-            v => c.GlobalMenuEnabled = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Show desktop icons", c.ShowDesktopIcons, 40, y,
-            v => c.ShowDesktopIcons = v));
-        y += 38;
-
-        // Multi-monitor
-        panel.Controls.Add(MakeSectionHeader("Multi-Monitor", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Independent panels per monitor", c.IndependentPanels, 40, y,
-            v => c.IndependentPanels = v));
-        y += 38;
-
-        // Panel style presets
-        panel.Controls.Add(MakeSectionHeader("Panel Style Presets", y));
-        y += 28;
-
-        string[][] styles =
-        {
-            new[] { "macOS Dock", "Floating dock at bottom center with magnification" },
-            new[] { "GNOME Top Bar", "Slim top bar with Activities, clock, system tray" },
-            new[] { "KDE Plasma Panel", "Full-width bottom panel with task manager" },
-            new[] { "Unity Launcher", "Left-side vertical application launcher" },
-            new[] { "i3bar", "Minimal status bar with workspaces and system info" },
-            new[] { "Waybar", "Modern Wayland-style bar with modules" },
-            new[] { "Polybar", "Highly customizable modular bar" },
-            new[] { "Plank", "Simple, minimal dock" },
-        };
-
-        foreach (var style in styles)
-        {
-            var card = MakeCard(40, y, 860, 44);
-            card.Controls.Add(new Label
-            {
-                Text = style[0],
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
-                Location = new Point(16, 4),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = style[1],
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(16, 24),
-                AutoSize = true,
-            });
-            var applyStyleBtn = MakeButton("APPLY", 770, 6, 70, 30, Theme.BgPanel, Theme.Accent, () =>
-            {
-                MessageBox.Show($"Panel style '{style[0]}' applied!\n\n{style[1]}",
-                    "Panel Style", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            });
-            card.Controls.Add(applyStyleBtn);
-            panel.Controls.Add(card);
-            y += 52;
-        }
-        y += 20;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // WALLPAPER PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildWallpaperPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Wallpaper & Desktop", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Static, animated, video, GIF, and interactive wallpapers — desktop cubes and 3D workspaces", y));
-        y += 40;
-
-        // Wallpaper mode
-        panel.Controls.Add(MakeSectionHeader("Wallpaper Mode", y));
-        y += 28;
-
-        string[][] wallModes =
-        {
-            new[] { "Static", "Traditional static wallpaper image", "\uEB9F" },
-            new[] { "Animated", "Smoothly animated dynamic wallpaper", "\uE7B5" },
-            new[] { "Video", "Looping video wallpaper (MP4, WebM)", "\uE714" },
-            new[] { "GIF", "Animated GIF as desktop background", "\uE786" },
-            new[] { "Interactive", "Wallpaper that reacts to mouse/keyboard", "\uE815" },
-        };
-
-        int wx = 40;
-        foreach (var mode in wallModes)
-        {
-            bool selected = c.WallpaperMode == mode[0];
-            var card = MakeCard(wx, y, 160, 80);
-            card.BackColor = selected ? Color.FromArgb(20, 30, 55) : Theme.BgCard;
-            card.Cursor = Cursors.Hand;
-
-            card.Controls.Add(new Label
-            {
-                Text = mode[2],
-                Font = new Font("Segoe MDL2 Assets", 18f),
-                ForeColor = selected ? Theme.Accent : Theme.TextSecondary,
-                Location = new Point(12, 8),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = mode[0],
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = selected ? Theme.Accent : Theme.TextPrimary,
-                Location = new Point(12, 40),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = mode[1].Length > 25 ? mode[1][..25] + "..." : mode[1],
-                Font = new Font("Segoe UI", 7f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(12, 58),
-                AutoSize = true,
-            });
-
-            string modeName = mode[0];
-            card.Click += (_, _) =>
-            {
-                c.WallpaperMode = modeName;
-                AppConfig.Save();
-                SelectNav(_navItems[8]);
-            };
-
-            panel.Controls.Add(card);
-            wx += 168;
-        }
-        y += 96;
-
-        // Wallpaper file
-        panel.Controls.Add(MakeSectionHeader("Wallpaper Source", y));
-        y += 28;
-
-        panel.Controls.Add(new Label
-        {
-            Text = string.IsNullOrEmpty(c.WallpaperPath) ? "No custom wallpaper selected" : c.WallpaperPath,
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(40, y),
-            Size = new Size(600, 20),
-        });
-        panel.Controls.Add(MakeButton("BROWSE...", 660, y - 4, 110, 30, Theme.BgCard, Theme.Accent, () =>
-        {
-            using var ofd = new OpenFileDialog
-            {
-                Filter = "All Supported|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.mp4;*.webm;*.avi|Images|*.jpg;*.jpeg;*.png;*.bmp|GIFs|*.gif|Videos|*.mp4;*.webm;*.avi",
-                Title = "Select Wallpaper"
-            };
-            if (ofd.ShowDialog() == DialogResult.OK)
-            {
-                c.WallpaperPath = ofd.FileName;
-                AppConfig.Save();
-                SelectNav(_navItems[8]);
-            }
-        }));
-        y += 38;
-
-        // Multi-monitor wallpapers
-        panel.Controls.Add(MakeToggle("Independent wallpaper per monitor", c.IndependentWallpapers, 40, y,
-            v => c.IndependentWallpapers = v));
-        y += 38;
-
-        // Apply
-        panel.Controls.Add(MakeButton("SET WALLPAPER", 40, y, 180, 40, Theme.BgPanel, Theme.Accent, () =>
-        {
-            AppConfig.Save();
-            if (!string.IsNullOrEmpty(c.WallpaperPath) && c.WallpaperMode == "Static")
-            {
-                WallpaperEngine.SetStatic(c.WallpaperPath);
-            }
-            MessageBox.Show($"Wallpaper mode set to: {c.WallpaperMode}\n\n" +
-                (c.WallpaperMode == "Static"
-                    ? "Wallpaper applied immediately."
-                    : "The wallpaper engine will run in the background for animated/video/interactive wallpapers."),
-                "Wallpaper Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 60;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DESKTOP WIDGETS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildWidgetsPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Desktop Widgets", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Conky-style system monitors, Rainmeter-like dashboards, and live desktop information displays", y));
-        y += 40;
-
-        panel.Controls.Add(MakeToggle("Enable desktop widgets", c.WidgetsEnabled, 40, y,
-            v => c.WidgetsEnabled = v));
-        y += 38;
-
-        // Available widgets
-        panel.Controls.Add(MakeSectionHeader("Available Widgets", y));
-        y += 28;
-
-        string[][] widgetTypes =
-        {
-            new[] { "System Monitor", "CPU, RAM, GPU, disk, network usage with live graphs", "\uE7F4" },
-            new[] { "Clock", "Analog or digital clock with customizable style", "\uE823" },
-            new[] { "Calendar", "Monthly calendar with events integration", "\uE787" },
-            new[] { "Weather", "Current conditions and forecast", "\uE9CA" },
-            new[] { "Music Player", "Now playing with album art and controls", "\uE8D6" },
-            new[] { "Network Monitor", "Upload/download speeds, connection status", "\uE839" },
-            new[] { "Disk Usage", "Drive space visualization", "\uEDA2" },
-            new[] { "CPU Graph", "Real-time CPU usage per core", "\uE9D9" },
-            new[] { "RAM Monitor", "Memory usage breakdown", "\uE964" },
-            new[] { "Battery", "Battery level and estimated time", "\uE83F" },
-            new[] { "Notes", "Sticky notes pinned to desktop", "\uE70B" },
-            new[] { "RSS Feed", "Live news feed on desktop", "\uE774" },
-            new[] { "App Launcher", "Quick launch frequently used apps", "\uE737" },
-            new[] { "Neofetch", "System info display (Linux style)", "\uE756" },
-            new[] { "Terminal Output", "Live command output on desktop", "\uE756" },
-            new[] { "Custom HTML", "Fully custom HTML/CSS/JS widget", "\uE943" },
-        };
-
-        foreach (var widget in widgetTypes)
-        {
-            var card = MakeCard(40, y, 860, 56);
-
-            card.Controls.Add(new Label
-            {
-                Text = widget[2],
-                Font = new Font("Segoe MDL2 Assets", 14f),
-                ForeColor = Theme.Accent,
-                Location = new Point(14, 14),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = widget[0],
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
-                Location = new Point(48, 6),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = widget[1],
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(48, 28),
-                AutoSize = true,
-            });
-
-            string widgetName = widget[0];
-            var addBtn = MakeButton("ADD", 790, 12, 50, 30, Theme.BgPanel, Theme.Accent, () =>
-            {
-                c.Widgets.Add(new WidgetConfig { Type = widgetName });
-                AppConfig.Save();
-                MessageBox.Show($"'{widgetName}' widget added to desktop!\n\nDrag to position. Right-click to configure.",
-                    "Widget Added", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            });
-            card.Controls.Add(addBtn);
-
-            panel.Controls.Add(card);
-            y += 64;
-        }
-        y += 20;
-
-        // Active widgets
-        if (c.Widgets.Count > 0)
-        {
-            panel.Controls.Add(MakeSectionHeader($"Active Widgets ({c.Widgets.Count})", y));
-            y += 28;
-
-            for (int i = 0; i < c.Widgets.Count; i++)
-            {
-                var w = c.Widgets[i];
-                var card = MakeCard(40, y, 860, 40);
-                card.Controls.Add(new Label
-                {
-                    Text = $"\u25CF {w.Type}  —  Position: ({w.X}, {w.Y})  Opacity: {w.Opacity}%",
-                    Font = new Font("Segoe UI", 9f),
-                    ForeColor = Theme.TextPrimary,
-                    Location = new Point(12, 10),
-                    AutoSize = true,
-                });
-                int idx = i;
-                var removeBtn = MakeButton("\u2715", 810, 5, 30, 28, Theme.BgPanel, Theme.Danger, () =>
-                {
-                    c.Widgets.RemoveAt(idx);
-                    AppConfig.Save();
-                    SelectNav(_navItems[9]);
-                });
-                card.Controls.Add(removeBtn);
-                panel.Controls.Add(card);
-                y += 48;
-            }
-            y += 20;
-        }
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // WOBBLY WINDOWS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildWobblyPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Wobbly Windows", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Compiz-style jelly window deformation — real soft-body physics with 3D tilt", y));
-        y += 40;
-
-        // Big toggle
-        var enableToggle = MakeToggle("Enable Wobbly Windows", c.WobblyEnabled, 40, y,
-            v => c.WobblyEnabled = v);
-        enableToggle.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
-        panel.Controls.Add(enableToggle);
-        y += 38;
-
-        panel.Controls.Add(new Label
-        {
-            Text = "Drag any title bar to wobble, or hold Ctrl+Alt and drag anywhere on any window.",
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(40, y),
-            AutoSize = true,
-        });
-        y += 28;
-
-        // ── Physics Sliders ──
-        panel.Controls.Add(MakeSectionHeader("Physics Parameters", y));
-        y += 28;
-
-        // Speed
-        var speedLabel = MakeSliderLabel("Speed", c.WobblySpeed, "%", 40, y);
-        panel.Controls.Add(speedLabel);
-        panel.Controls.Add(new Label
-        {
-            Text = "How fast the jelly reacts and settles",
-            Font = new Font("Segoe UI", 8f),
-            ForeColor = Theme.TextDim,
-            Location = new Point(460, y + 4),
-            AutoSize = true,
-        });
-        y += 22;
-        panel.Controls.Add(MakeSlider(40, 250, c.WobblySpeed, 40, y, 400, v =>
-        {
-            c.WobblySpeed = v;
-            speedLabel.Text = $"Speed: {v}%";
-        }));
-        y += 42;
-
-        // Wobble amount
-        var wobbleLabel = MakeSliderLabel("Wobble amount", c.WobblyAmount, "%", 40, y);
-        panel.Controls.Add(wobbleLabel);
-        panel.Controls.Add(new Label
-        {
-            Text = "Rebound count / juiciness",
-            Font = new Font("Segoe UI", 8f),
-            ForeColor = Theme.TextDim,
-            Location = new Point(460, y + 4),
-            AutoSize = true,
-        });
-        y += 22;
-        panel.Controls.Add(MakeSlider(0, 100, c.WobblyAmount, 40, y, 400, v =>
-        {
-            c.WobblyAmount = v;
-            wobbleLabel.Text = $"Wobble amount: {v}%";
-        }));
-        y += 42;
-
-        // Jelly softness
-        var softLabel = MakeSliderLabel("Jelly softness", c.WobblySoftness, "%", 40, y);
-        panel.Controls.Add(softLabel);
-        panel.Controls.Add(new Label
-        {
-            Text = "How rubbery the trailing stretch is",
-            Font = new Font("Segoe UI", 8f),
-            ForeColor = Theme.TextDim,
-            Location = new Point(460, y + 4),
-            AutoSize = true,
-        });
-        y += 22;
-        panel.Controls.Add(MakeSlider(0, 100, c.WobblySoftness, 40, y, 400, v =>
-        {
-            c.WobblySoftness = v;
-            softLabel.Text = $"Jelly softness: {v}%";
-        }));
-        y += 42;
-
-        // 3D Tilt
-        var tiltLabel = MakeSliderLabel("3D tilt angle", c.WobblyTilt, "\u00B0", 40, y);
-        panel.Controls.Add(tiltLabel);
-        panel.Controls.Add(new Label
-        {
-            Text = "Max lean angle during motion",
-            Font = new Font("Segoe UI", 8f),
-            ForeColor = Theme.TextDim,
-            Location = new Point(460, y + 4),
-            AutoSize = true,
-        });
-        y += 22;
-        panel.Controls.Add(MakeSlider(0, 30, c.WobblyTilt, 40, y, 400, v =>
-        {
-            c.WobblyTilt = v;
-            tiltLabel.Text = $"3D tilt angle: {v}\u00B0";
-        }));
-        y += 42;
-
-        // Max stretch
-        var stretchLabel = MakeSliderLabel("Max stretch", c.WobblyStretch, "%", 40, y);
-        panel.Controls.Add(stretchLabel);
-        panel.Controls.Add(new Label
-        {
-            Text = "Smear cap — how far mesh points can stray",
-            Font = new Font("Segoe UI", 8f),
-            ForeColor = Theme.TextDim,
-            Location = new Point(460, y + 4),
-            AutoSize = true,
-        });
-        y += 22;
-        panel.Controls.Add(MakeSlider(20, 90, c.WobblyStretch, 40, y, 400, v =>
-        {
-            c.WobblyStretch = v;
-            stretchLabel.Text = $"Max stretch: {v}%";
-        }));
-        y += 42;
-
-        // ── Feature Toggles ──
-        panel.Controls.Add(MakeSectionHeader("Features", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Jelly deformation (soft-body mesh bending)", c.WobblyDeform, 40, y,
-            v => c.WobblyDeform = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("3D tilt on motion (perspective wobble on release)", c.WobblyTiltEnabled, 40, y,
-            v => c.WobblyTiltEnabled = v));
-        y += 38;
-
-        // ── Presets ──
-        panel.Controls.Add(MakeSectionHeader("Quick Presets", y));
-        y += 28;
-
-        var presets = new[]
-        {
-            ("Subtle", 80, 30, 40, 8, 30),
-            ("Default", 100, 75, 70, 16, 55),
-            ("Bouncy", 130, 95, 90, 22, 75),
-            ("Jello", 70, 100, 100, 28, 90),
-            ("Stiff", 200, 15, 20, 5, 25),
-        };
-
-        int bx = 40;
-        foreach (var (name, speed, amount, soft, tilt, stretch) in presets)
-        {
-            var presetBtn = MakeButton(name, bx, y, 100, 34, Theme.BgCard, Theme.Accent, () =>
-            {
-                c.WobblySpeed = speed;
-                c.WobblyAmount = amount;
-                c.WobblySoftness = soft;
-                c.WobblyTilt = tilt;
-                c.WobblyStretch = stretch;
-                AppConfig.Save();
-                SelectNav(_navItems[10]);
-            });
-            panel.Controls.Add(presetBtn);
-            bx += 110;
-        }
-        y += 50;
-
-        // Reset
-        panel.Controls.Add(MakeButton("RESET TO DEFAULTS", 40, y, 180, 34, Theme.BgCard, Theme.Warning, () =>
-        {
-            c.WobblySpeed = 100;
-            c.WobblyAmount = 75;
-            c.WobblySoftness = 70;
-            c.WobblyTilt = 16;
-            c.WobblyStretch = 55;
-            c.WobblyDeform = true;
-            c.WobblyTiltEnabled = true;
-            AppConfig.Save();
-            SelectNav(_navItems[10]);
-        }));
-        y += 50;
-
-        // Note about WobblyWindows integration
-        var noteCard = MakeCard(40, y, 860, 70);
-        noteCard.Controls.Add(new Label
-        {
-            Text = "\u24D8  INTEGRATION NOTE",
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            ForeColor = Theme.Accent,
-            Location = new Point(16, 10),
-            AutoSize = true,
-        });
-        noteCard.Controls.Add(new Label
-        {
-            Text = "Wobbly Windows runs as a separate background process (WobblyWindows.exe). " +
-                   "These settings are synced to its config. Make sure WobblyWindows is installed " +
-                   "alongside LinuxifyWindows for the effect to work.",
-            Font = new Font("Segoe UI", 8.5f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(16, 32),
-            Size = new Size(820, 32),
-        });
-        panel.Controls.Add(noteCard);
-        y += 90;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TRANSPARENCY PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildTransparencyPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Window Transparency", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Per-window and per-app opacity control with blur effects — make any window transparent", y));
-        y += 40;
-
-        panel.Controls.Add(MakeToggle("Enable window transparency system", c.TransparencyEnabled, 40, y,
-            v => c.TransparencyEnabled = v));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Background blur (Acrylic/Mica effect)", c.BlurEnabled, 40, y,
-            v => c.BlurEnabled = v));
-        y += 38;
-
-        // Default opacity
-        panel.Controls.Add(MakeSectionHeader("Default Window Opacity", y));
-        y += 28;
-
-        var opacityLabel = MakeSliderLabel("Default opacity", c.DefaultOpacity, "%", 40, y);
-        panel.Controls.Add(opacityLabel);
-        y += 22;
-        panel.Controls.Add(MakeSlider(20, 100, c.DefaultOpacity, 40, y, 400, v =>
-        {
-            c.DefaultOpacity = v;
-            opacityLabel.Text = $"Default opacity: {v}%";
-        }));
-        y += 48;
-
-        // Per-app opacity
-        panel.Controls.Add(MakeSectionHeader("Per-Application Opacity", y));
-        y += 28;
-        panel.Controls.Add(new Label
-        {
-            Text = "Set custom transparency for individual applications",
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(40, y),
-            AutoSize = true,
-        });
-        y += 26;
-
-        // Common apps with opacity controls
-        string[][] apps =
-        {
-            new[] { "Windows Terminal", "WindowsTerminal" },
-            new[] { "File Explorer", "explorer" },
-            new[] { "Microsoft Edge", "msedge" },
-            new[] { "Google Chrome", "chrome" },
-            new[] { "Firefox", "firefox" },
-            new[] { "Visual Studio Code", "Code" },
-            new[] { "Discord", "Discord" },
-            new[] { "Spotify", "Spotify" },
-            new[] { "Steam", "steam" },
-            new[] { "Notepad", "notepad" },
-            new[] { "Task Manager", "Taskmgr" },
-            new[] { "Settings", "SystemSettings" },
-        };
-
-        foreach (var app in apps)
-        {
-            int appOpacity = c.PerAppOpacity.GetValueOrDefault(app[1], 100);
-            var card = MakeCard(40, y, 860, 42);
-
-            card.Controls.Add(new Label
-            {
-                Text = app[0],
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = Theme.TextPrimary,
-                Location = new Point(16, 10),
-                AutoSize = true,
-            });
-
-            var appOpacityLabel = new Label
-            {
-                Text = $"{appOpacity}%",
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = Theme.Accent,
-                Location = new Point(720, 10),
-                Size = new Size(50, 20),
-                TextAlign = ContentAlignment.MiddleRight,
-            };
-            card.Controls.Add(appOpacityLabel);
-
-            string processName = app[1];
-            var slider = MakeSlider(20, 100, appOpacity, 300, 6, 400, v =>
-            {
-                c.PerAppOpacity[processName] = v;
-                appOpacityLabel.Text = $"{v}%";
-            });
-            card.Controls.Add(slider);
-
-            var applyBtn = MakeButton("SET", 790, 6, 50, 28, Theme.BgPanel, Theme.Accent, () =>
-            {
-                int opacity = c.PerAppOpacity.GetValueOrDefault(processName, 100);
-                TransparencyEngine.SetProcessOpacity(processName, opacity);
-            });
-            card.Controls.Add(applyBtn);
-
-            panel.Controls.Add(card);
-            y += 50;
-        }
-        y += 20;
-
-        // Apply all button
-        panel.Controls.Add(MakeButton("APPLY ALL TRANSPARENCY", 40, y, 220, 40, Theme.BgPanel, Theme.Accent, () =>
-        {
-            AppConfig.Save();
-            TransparencyEngine.ApplyAll();
-            MessageBox.Show("Transparency settings applied to all running windows!\n\nNew windows will inherit the default opacity.",
-                "Transparency Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 60;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // BOOT & LOGIN PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildBootPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Boot & Login Screen", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Custom boot animations, splash screens, lock screens, and login UI", y));
-        y += 40;
-
-        // Boot animation
-        panel.Controls.Add(MakeSectionHeader("Boot Animation", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Custom boot animation (Plymouth-style)", c.BootAnimation, 40, y,
-            v => c.BootAnimation = v));
-        y += 30;
-        panel.Controls.Add(MakeButton("SELECT ANIMATION...", 40, y, 180, 34, Theme.BgCard, Theme.Accent, () =>
-        {
-            MessageBox.Show("Boot animation selector:\n\n" +
-                "\u2022 Spinner (default)\n" +
-                "\u2022 Matrix Rain\n" +
-                "\u2022 Neon Pulse\n" +
-                "\u2022 Linux Tux\n" +
-                "\u2022 Custom (provide MP4/GIF)\n\n" +
-                "Note: Boot animation replacement requires modifying Windows boot configuration.\n" +
-                "Admin privileges required.",
-                "Boot Animations", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 48;
-
-        // Splash screen
-        panel.Controls.Add(MakeSectionHeader("Splash Screen", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Show custom splash screen during startup", c.CustomSplashScreen, 40, y,
-            v => c.CustomSplashScreen = v));
-        y += 30;
-        panel.Controls.Add(new Label
-        {
-            Text = string.IsNullOrEmpty(c.SplashImagePath) ? "No splash image selected" : c.SplashImagePath,
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(40, y),
-            AutoSize = true,
-        });
-        panel.Controls.Add(MakeButton("SELECT IMAGE...", 500, y - 4, 140, 30, Theme.BgCard, Theme.Accent, () =>
-        {
-            using var ofd = new OpenFileDialog { Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp;*.gif", Title = "Select Splash Image" };
-            if (ofd.ShowDialog() == DialogResult.OK)
-            {
-                c.SplashImagePath = ofd.FileName;
-                AppConfig.Save();
-                SelectNav(_navItems[12]);
-            }
-        }));
-        y += 38;
-
-        // Lock screen
-        panel.Controls.Add(MakeSectionHeader("Lock Screen", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Custom lock screen overlay", c.CustomLockScreen, 40, y,
-            v => c.CustomLockScreen = v));
-        y += 38;
-
-        // Login screen
-        panel.Controls.Add(MakeSectionHeader("Login Screen", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Custom login screen (replaces Windows login UI)", c.CustomLoginScreen, 40, y,
-            v => c.CustomLoginScreen = v));
-        y += 30;
-
-        panel.Controls.Add(new Label
-        {
-            Text = "Login screen styles:",
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(40, y),
-            AutoSize = true,
-        });
-        y += 24;
-
-        string[][] loginStyles =
-        {
-            new[] { "GDM / GNOME", "Clean center-focused login with blurred wallpaper" },
-            new[] { "SDDM / KDE", "Feature-rich login with user list and session picker" },
-            new[] { "LightDM GTK", "Classic lightweight login greeter" },
-            new[] { "macOS Ventura", "User avatar with name and password field" },
-            new[] { "Cyberpunk Terminal", "Matrix-style terminal login prompt" },
-            new[] { "Minimal", "Just a password field, nothing else" },
-        };
-
-        foreach (var style in loginStyles)
-        {
-            var card = MakeCard(40, y, 860, 44);
-            card.Controls.Add(new Label
-            {
-                Text = style[0],
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
-                Location = new Point(16, 4),
-                AutoSize = true,
-            });
-            card.Controls.Add(new Label
-            {
-                Text = style[1],
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = Theme.TextSecondary,
-                Location = new Point(16, 24),
-                AutoSize = true,
-            });
-            panel.Controls.Add(card);
-            y += 52;
-        }
-        y += 20;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // KEYBOARD SHORTCUTS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildKeyboardPanel()
-    {
-        var panel = MakeScrollPanel();
-        var c = AppConfig.Current;
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Keyboard Shortcuts", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("i3/Sway-style keybindings — configure every shortcut for a completely keyboard-driven desktop", y));
-        y += 40;
-
-        panel.Controls.Add(MakeToggle("Enable keyboard-driven desktop mode", c.KeyboardDriven, 40, y,
-            v => c.KeyboardDriven = v));
-        y += 38;
-
-        panel.Controls.Add(MakeSectionHeader("Key Bindings", y));
-        y += 28;
-
-        foreach (var (key, action) in c.KeyBindings)
-        {
-            var card = MakeCard(40, y, 860, 40);
-
-            card.Controls.Add(new Label
-            {
-                Text = key,
-                Font = new Font("Consolas", 10f, FontStyle.Bold),
-                ForeColor = Theme.Accent,
-                BackColor = Color.FromArgb(15, Theme.Accent),
-                Location = new Point(12, 8),
-                AutoSize = true,
-                Padding = new Padding(6, 2, 6, 2),
-            });
-
-            card.Controls.Add(new Label
-            {
-                Text = "\u2192",
-                Font = new Font("Segoe UI", 12f),
-                ForeColor = Theme.TextDim,
-                Location = new Point(180, 6),
-                AutoSize = true,
-            });
-
-            card.Controls.Add(new Label
-            {
-                Text = action,
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = Theme.TextPrimary,
-                Location = new Point(210, 10),
-                AutoSize = true,
-            });
-
-            string bindKey = key;
-            var editBtn = MakeButton("EDIT", 790, 5, 50, 28, Theme.BgPanel, Theme.AccentDim, () =>
-            {
-                MessageBox.Show($"Press the new key combination for: {c.KeyBindings[bindKey]}\n\nCurrent: {bindKey}",
-                    "Rebind Shortcut", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            });
-            card.Controls.Add(editBtn);
-
-            panel.Controls.Add(card);
-            y += 48;
-        }
-        y += 20;
-
-        // Add new binding
-        panel.Controls.Add(MakeButton("ADD NEW BINDING", 40, y, 180, 34, Theme.BgCard, Theme.Accent, () =>
-        {
-            MessageBox.Show("Press the key combination, then select the action from the list.",
-                "Add Binding", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-
-        // Load preset bindings
-        panel.Controls.Add(MakeButton("LOAD i3 DEFAULTS", 240, y, 160, 34, Theme.BgCard, Theme.AccentDim, () =>
-        {
-            c.KeyBindings = new Dictionary<string, string>
-            {
-                ["Super+Enter"] = "Terminal",
-                ["Super+D"] = "App Launcher (dmenu/rofi)",
-                ["Super+Q"] = "Close Window",
-                ["Super+Shift+Q"] = "Force Kill Window",
-                ["Super+H"] = "Split Horizontal",
-                ["Super+V"] = "Split Vertical",
-                ["Super+F"] = "Fullscreen",
-                ["Super+S"] = "Stacking Layout",
-                ["Super+W"] = "Tabbed Layout",
-                ["Super+E"] = "Toggle Split",
-                ["Super+Space"] = "Toggle Floating",
-                ["Super+1"] = "Workspace 1",
-                ["Super+2"] = "Workspace 2",
-                ["Super+3"] = "Workspace 3",
-                ["Super+4"] = "Workspace 4",
-                ["Super+5"] = "Workspace 5",
-                ["Super+Shift+1"] = "Move to Workspace 1",
-                ["Super+Shift+2"] = "Move to Workspace 2",
-                ["Super+Shift+3"] = "Move to Workspace 3",
-                ["Super+Shift+R"] = "Restart WM",
-                ["Super+Shift+E"] = "Exit WM",
-                ["Super+Left"] = "Focus Left",
-                ["Super+Right"] = "Focus Right",
-                ["Super+Up"] = "Focus Up",
-                ["Super+Down"] = "Focus Down",
-                ["Super+R"] = "Resize Mode",
-            };
-            AppConfig.Save();
-            SelectNav(_navItems[13]);
-        }));
-        y += 50;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SETTINGS PANEL
-    // ═══════════════════════════════════════════════════════════════════════════
-    Panel BuildSettingsPanel()
-    {
-        var panel = MakeScrollPanel();
-        int y = 16;
-
-        panel.Controls.Add(MakeHeader("Settings", y));
-        y += 36;
-        panel.Controls.Add(MakeSubheader("Application settings, import/export, startup behavior, and system utilities", y));
-        y += 40;
-
-        // ── Startup ──
-        panel.Controls.Add(MakeSectionHeader("Startup", y));
-        y += 28;
-        panel.Controls.Add(MakeToggle("Run LinuxifyWindows at startup", false, 40, y, v =>
-        {
-            try
-            {
-                string exePath = Application.ExecutablePath;
-                using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
-                if (v)
-                    key?.SetValue("LinuxifyWindows", $"\"{exePath}\"");
-                else
-                    key?.DeleteValue("LinuxifyWindows", false);
-            }
-            catch { }
-        }));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Start minimized to system tray", false, 40, y, _ => { }));
-        y += 30;
-        panel.Controls.Add(MakeToggle("Apply settings on login", true, 40, y, _ => { }));
-        y += 38;
-
-        // ── Shortcuts ──
-        panel.Controls.Add(MakeSectionHeader("System Integration", y));
-        y += 28;
-
-        panel.Controls.Add(MakeButton("PIN TO START MENU", 40, y, 180, 34, Theme.BgCard, Theme.Accent, () =>
-        {
-            MessageBox.Show("LinuxifyWindows has been pinned to the Start Menu!\n\n(Right-click the .exe and select 'Pin to Start' for manual pinning)",
-                "Pinned", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        panel.Controls.Add(MakeButton("CREATE DESKTOP SHORTCUT", 240, y, 220, 34, Theme.BgCard, Theme.Accent, () =>
-        {
-            try
-            {
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                string shortcutPath = Path.Combine(desktop, "LinuxifyWindows.lnk");
-                // Use WScript.Shell for proper .lnk creation
-                MessageBox.Show($"Desktop shortcut created at:\n{shortcutPath}",
-                    "Shortcut Created", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to create shortcut: {ex.Message}", "Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }));
-        panel.Controls.Add(MakeButton("ADD TO PATH", 480, y, 140, 34, Theme.BgCard, Theme.AccentDim, () =>
-        {
-            MessageBox.Show("LinuxifyWindows added to system PATH.\n\nYou can now run 'linuxify' from any terminal.",
-                "PATH Updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }));
-        y += 48;
-
-        // ── Import/Export ──
-        panel.Controls.Add(MakeSectionHeader("Configuration", y));
-        y += 28;
-
-        panel.Controls.Add(MakeButton("EXPORT CONFIG", 40, y, 160, 34, Theme.BgCard, Theme.Accent, () =>
-        {
-            using var sfd = new SaveFileDialog { Filter = "JSON|*.json", FileName = "linuxify-config.json" };
-            if (sfd.ShowDialog() == DialogResult.OK)
-            {
-                File.Copy(Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "LinuxifyWindows", "config.json"), sfd.FileName, true);
-                MessageBox.Show("Configuration exported!", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-        }));
-
-        panel.Controls.Add(MakeButton("IMPORT CONFIG", 220, y, 160, 34, Theme.BgCard, Theme.Accent, () =>
-        {
-            using var ofd = new OpenFileDialog { Filter = "JSON|*.json" };
-            if (ofd.ShowDialog() == DialogResult.OK)
-            {
-                File.Copy(ofd.FileName, Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "LinuxifyWindows", "config.json"), true);
-                AppConfig.Load();
-                SelectNav(_navItems[14]);
-                MessageBox.Show("Configuration imported! Settings reloaded.", "Import",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-        }));
-
-        panel.Controls.Add(MakeButton("RESET ALL", 400, y, 120, 34, Theme.BgCard, Theme.Danger, () =>
-        {
-            if (MessageBox.Show("Reset ALL settings to defaults?\n\nThis cannot be undone.",
-                "Confirm Reset", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
-            {
-                AppConfig.Current = new AppConfig();
-                AppConfig.Save();
-                SelectNav(_navItems[14]);
-            }
-        }));
-        y += 48;
-
-        // ── Logs ──
-        panel.Controls.Add(MakeSectionHeader("Diagnostics", y));
-        y += 28;
-        panel.Controls.Add(MakeButton("OPEN LOG FILE", 40, y, 160, 34, Theme.BgCard, Theme.AccentDim, () =>
-        {
-            try { Process.Start(new ProcessStartInfo(Log.FilePath) { UseShellExecute = true }); }
-            catch { }
-        }));
-        panel.Controls.Add(MakeButton("OPEN CONFIG FOLDER", 220, y, 180, 34, Theme.BgCard, Theme.AccentDim, () =>
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo(Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "LinuxifyWindows")) { UseShellExecute = true });
-            }
-            catch { }
-        }));
-        y += 48;
-
-        // ── About ──
-        panel.Controls.Add(MakeSectionHeader("About", y));
-        y += 28;
-
-        var aboutCard = MakeCard(40, y, 860, 120);
-        aboutCard.Controls.Add(new Label
-        {
-            Text = "LINUXIFY WINDOWS",
-            Font = new Font("Segoe UI", 16f, FontStyle.Bold),
-            ForeColor = Theme.Accent,
-            Location = new Point(20, 12),
-            AutoSize = true,
-        });
-        aboutCard.Controls.Add(new Label
-        {
-            Text = "v1.0.0  —  Total Desktop Customization Suite",
-            Font = new Font("Segoe UI", 10f),
-            ForeColor = Theme.TextSecondary,
-            Location = new Point(20, 40),
-            AutoSize = true,
-        });
-        aboutCard.Controls.Add(new Label
-        {
-            Text = "Make Windows 11 look, feel, and behave like Linux.\n" +
-                   "Desktop environments, window effects, themes, icon packs, wobbly windows, and more.",
-            Font = new Font("Segoe UI", 9f),
-            ForeColor = Theme.TextDim,
-            Location = new Point(20, 64),
-            Size = new Size(800, 40),
-        });
-        panel.Controls.Add(aboutCard);
-        y += 140;
-
-        FinalizeScrollPanel(panel);
-        return panel;
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// WINDOW EFFECTS ENGINE — applies DWM/Win32 window effects
-// ═══════════════════════════════════════════════════════════════════════════════
-static class WindowEffectsEngine
-{
-    public static void ApplyAll()
-    {
-        var c = AppConfig.Current;
-        Log.Write("Applying window effects...");
-
-        if (c.RoundedCorners)
-            ApplyRoundedCorners(c.CornerRadius);
-
-        if (c.DarkMode)
-            SetSystemDarkMode(true);
-
-        Log.Write("Window effects applied.");
-    }
-
-    static void ApplyRoundedCorners(int radius)
-    {
-        try
-        {
-            // DWM corner preference: DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3
-            int cornerPref = radius > 8 ? 2 : (radius > 0 ? 3 : 1);
-            // Would enumerate windows and apply — for now, set the preference
-            Log.Write($"Corner preference set to {cornerPref} (radius {radius}px)");
-        }
-        catch (Exception ex) { Log.Write("ApplyRoundedCorners failed: " + ex.Message); }
-    }
-
-    static void SetSystemDarkMode(bool dark)
+    public static void ApplyDarkMode()
     {
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(
                 @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize", true);
-            key?.SetValue("AppsUseLightTheme", dark ? 0 : 1, RegistryValueKind.DWord);
-            key?.SetValue("SystemUsesLightTheme", dark ? 0 : 1, RegistryValueKind.DWord);
-            Log.Write($"System dark mode set to {dark}");
+            int val = AppConfig.Current.DarkMode ? 0 : 1;
+            key?.SetValue("AppsUseLightTheme", val, RegistryValueKind.DWord);
+            key?.SetValue("SystemUsesLightTheme", val, RegistryValueKind.DWord);
+            Log.Write($"Dark mode = {AppConfig.Current.DarkMode}");
         }
-        catch (Exception ex) { Log.Write("SetSystemDarkMode failed: " + ex.Message); }
+        catch (Exception ex) { Log.Write("ApplyDarkMode: " + ex.Message); }
     }
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// THEME ENGINE — applies accent colors and system theme
-// ═══════════════════════════════════════════════════════════════════════════════
-static class ThemeEngine
-{
-    public static void ApplySystemTheme()
+    public static void ApplyAccent()
     {
-        var c = AppConfig.Current;
-        Log.Write($"Applying theme: {c.ThemeName}, accent: {c.AccentColor}");
-
         try
         {
-            // Set accent color
             Color accent;
-            try { accent = ColorTranslator.FromHtml(c.AccentColor); }
+            try { accent = ColorTranslator.FromHtml(AppConfig.Current.AccentColor); }
             catch { accent = Color.FromArgb(0, 120, 212); }
-
-            // Windows accent color is stored as ABGR
-            uint accentColor = (uint)(accent.B << 16 | accent.G << 8 | accent.R);
-
-            using var key = Registry.CurrentUser.OpenSubKey(
-                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Accent", true);
-            key?.SetValue("AccentColorMenu", accentColor, RegistryValueKind.DWord);
-            key?.SetValue("StartColorMenu", accentColor, RegistryValueKind.DWord);
-
-            // Enable/disable accent on titlebars and borders
-            using var dwmKey = Registry.CurrentUser.OpenSubKey(
-                @"SOFTWARE\Microsoft\Windows\DWM", true);
-            dwmKey?.SetValue("AccentColor", accentColor, RegistryValueKind.DWord);
-            dwmKey?.SetValue("ColorPrevalence", 1, RegistryValueKind.DWord);
-
-            // Dark mode
-            WindowEffectsEngine.ApplyAll();
-
-            Log.Write("Theme applied successfully.");
+            uint abgr = (uint)(accent.B << 16 | accent.G << 8 | accent.R);
+            using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Accent", true);
+            key?.SetValue("AccentColorMenu", abgr, RegistryValueKind.DWord);
+            key?.SetValue("StartColorMenu", abgr, RegistryValueKind.DWord);
+            using var dwm = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\DWM", true);
+            dwm?.SetValue("AccentColor", abgr, RegistryValueKind.DWord);
+            dwm?.SetValue("ColorizationColor", abgr, RegistryValueKind.DWord);
+            dwm?.SetValue("ColorPrevalence", 1, RegistryValueKind.DWord);
+            Log.Write($"Accent color = {AppConfig.Current.AccentColor}");
         }
-        catch (Exception ex) { Log.Write("ApplySystemTheme failed: " + ex.Message); }
+        catch (Exception ex) { Log.Write("ApplyAccent: " + ex.Message); }
     }
-}
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRANSPARENCY ENGINE — per-window opacity via Win32
-// ═══════════════════════════════════════════════════════════════════════════════
-static class TransparencyEngine
-{
-    public static void SetProcessOpacity(string processName, int opacityPercent)
+    public static void ApplyCorners()
     {
         try
         {
-            var processes = Process.GetProcessesByName(processName);
-            foreach (var proc in processes)
+            // DWMWA_WINDOW_CORNER_PREFERENCE = 33
+            // DWMWCP_DEFAULT=0 DONOTROUND=1 ROUND=2 ROUNDSMALL=3
+            int pref = AppConfig.Current.RoundedCorners
+                ? (AppConfig.Current.CornerRadius > 8 ? 2 : 3)
+                : 1;
+            EnumWindows((hwnd) =>
             {
-                if (proc.MainWindowHandle != IntPtr.Zero)
-                {
-                    SetWindowOpacity(proc.MainWindowHandle, opacityPercent);
-                    Log.Write($"Set opacity {opacityPercent}% on {processName} (hwnd {proc.MainWindowHandle})");
-                }
-            }
+                if (Native.IsWindowVisible(hwnd))
+                    Native.DwmSetWindowAttribute(hwnd, 33, ref pref, sizeof(int));
+            });
+            Log.Write($"Corners = {pref}");
         }
-        catch (Exception ex) { Log.Write($"SetProcessOpacity failed for {processName}: {ex.Message}"); }
+        catch (Exception ex) { Log.Write("ApplyCorners: " + ex.Message); }
     }
 
-    public static void SetWindowOpacity(IntPtr hwnd, int opacityPercent)
+    public static void SetWindowOpacity(IntPtr hwnd, int pct)
     {
-        byte alpha = (byte)(255 * Math.Clamp(opacityPercent, 0, 100) / 100);
-        int exStyle = Native.GetWindowLong(hwnd, Native.GWL_EXSTYLE);
-        Native.SetWindowLong(hwnd, Native.GWL_EXSTYLE, exStyle | Native.WS_EX_LAYERED);
+        byte alpha = (byte)(255 * Math.Clamp(pct, 0, 100) / 100);
+        int ex = Native.GetWindowLong(hwnd, Native.GWL_EXSTYLE);
+        Native.SetWindowLong(hwnd, Native.GWL_EXSTYLE, ex | Native.WS_EX_LAYERED);
         Native.SetLayeredWindowAttributes(hwnd, 0, alpha, Native.LWA_ALPHA);
     }
 
-    public static void ApplyAll()
-    {
-        var c = AppConfig.Current;
-        foreach (var (processName, opacity) in c.PerAppOpacity)
-        {
-            SetProcessOpacity(processName, opacity);
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// WALLPAPER ENGINE — sets static wallpapers, animated wallpaper framework
-// ═══════════════════════════════════════════════════════════════════════════════
-static class WallpaperEngine
-{
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-
-    const int SPI_SETDESKWALLPAPER = 0x0014;
-    const int SPIF_UPDATEINIFILE = 0x01;
-    const int SPIF_SENDCHANGE = 0x02;
-
-    public static void SetStatic(string path)
+    public static void SetProcessOpacity(string processName, int pct)
     {
         try
         {
-            SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, path,
-                SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
-            Log.Write($"Static wallpaper set: {path}");
+            foreach (var proc in Process.GetProcessesByName(processName))
+                if (proc.MainWindowHandle != IntPtr.Zero)
+                    SetWindowOpacity(proc.MainWindowHandle, pct);
+            Log.Write($"Opacity {processName} = {pct}%");
         }
-        catch (Exception ex) { Log.Write("SetStatic wallpaper failed: " + ex.Message); }
+        catch (Exception ex) { Log.Write($"SetProcessOpacity({processName}): {ex.Message}"); }
+    }
+
+    public static void ApplyAllOpacity()
+    {
+        foreach (var (name, pct) in AppConfig.Current.PerAppOpacity)
+            SetProcessOpacity(name, pct);
+    }
+
+    public static void SetWallpaper(string path)
+    {
+        try
+        {
+            Native.SystemParametersInfo(0x0014, 0, path, 0x01 | 0x02);
+            Log.Write($"Wallpaper = {path}");
+        }
+        catch (Exception ex) { Log.Write("SetWallpaper: " + ex.Message); }
+    }
+
+    public static void SetStartup(bool enable)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+            if (enable) key?.SetValue("LinuxifyWindows", $"\"{Application.ExecutablePath}\"");
+            else key?.DeleteValue("LinuxifyWindows", false);
+            Log.Write($"Startup = {enable}");
+        }
+        catch (Exception ex) { Log.Write("SetStartup: " + ex.Message); }
+    }
+
+    static void EnumWindows(Action<IntPtr> action)
+    {
+        Native.EnumWindows((hwnd, _) => { action(hwnd); return true; }, IntPtr.Zero);
     }
 }
 
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// Win32 INTEROP
+// WOBBLY WINDOWS MANAGER — start/stop the integrated engine
+// ═══════════════════════════════════════════════════════════════════════════════
+static class WobblyManager
+{
+    static WobbleMouseHook _hook;
+    static WobbleEngine _engine;
+    static WobbleOverlay _overlay;
+    static bool _running;
+
+    public static bool Running => _running;
+
+    public static void Start()
+    {
+        if (_running) return;
+        _overlay = new WobbleOverlay();
+        _ = _overlay.Handle;
+        _engine = new WobbleEngine(_overlay.Handle);
+        _hook = new WobbleMouseHook(_engine);
+        _hook.Install();
+        _running = true;
+        Log.Write("Wobbly windows started");
+    }
+
+    public static void Stop()
+    {
+        if (!_running) return;
+        _hook?.Dispose(); _hook = null;
+        _engine?.Dispose(); _engine = null;
+        _overlay?.Dispose(); _overlay = null;
+        _running = false;
+        Log.Write("Wobbly windows stopped");
+    }
+
+    public static void Restart() { Stop(); Start(); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN FORM
+// ═══════════════════════════════════════════════════════════════════════════════
+sealed class MainForm : Form
+{
+    readonly Panel _sidebar, _content, _titleBar;
+    readonly List<NavItem> _navItems = new();
+    NavItem _activeNav;
+    bool _dragging; Point _dragStart;
+    System.Windows.Forms.Timer _glowTimer;
+    float _glow;
+
+    struct NavItem { public Panel Row; public Label Icon, Lbl; public string Name; public Func<Panel> Build; }
+
+    public MainForm()
+    {
+        Text = "LinuxifyWindows";
+        Size = new Size(1180, 760);
+        MinimumSize = new Size(900, 560);
+        FormBorderStyle = FormBorderStyle.None;
+        StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Theme.BgDeep;
+        DoubleBuffered = true;
+
+        // Title bar
+        _titleBar = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = Color.FromArgb(10, 12, 24) };
+        _titleBar.MouseDown += (_, e) => { if (e.Button == MouseButtons.Left) { _dragging = true; _dragStart = e.Location; } };
+        _titleBar.MouseUp += (_, _) => _dragging = false;
+        _titleBar.MouseMove += (_, e) => { if (_dragging) Location = new Point(Location.X + e.X - _dragStart.X, Location.Y + e.Y - _dragStart.Y); };
+
+        _titleBar.Controls.Add(new Label { Text = "\u25C8 LINUXIFY WINDOWS", Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+            ForeColor = Theme.Accent, Location = new Point(12, 7), AutoSize = true });
+
+        foreach (var (txt, idx, act) in new[] {("\u2715",0,(Action)(()=>Close())), ("\u25A1",1,(Action)(()=>WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized)), ("\u2500",2,(Action)(()=>WindowState = FormWindowState.Minimized))})
+        {
+            var b = new Label { Text = txt, Font = new Font("Segoe UI", 10f), ForeColor = Theme.Text2,
+                TextAlign = ContentAlignment.MiddleCenter, Size = new Size(36, 36), Tag = idx, Cursor = Cursors.Hand,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            int ii = idx;
+            b.Click += (_, _) => act();
+            if (ii == 0) { b.MouseEnter += (_, _) => b.BackColor = Theme.Danger; b.MouseLeave += (_, _) => b.BackColor = Color.Transparent; }
+            _titleBar.Controls.Add(b);
+        }
+
+        // Sidebar
+        _sidebar = new Panel { Dock = DockStyle.Left, Width = 210, BackColor = Theme.BgDark };
+
+        // Content
+        _content = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgDeep };
+
+        // Dock order: Fill first (docks last), then Left, then Top
+        Controls.Add(_content);
+        Controls.Add(_sidebar);
+        Controls.Add(_titleBar);
+
+        // Nav items
+        AddNav("\uE80F", "Desktop Environments", BuildDEPanel);
+        AddNav("\uE771", "Window Effects", BuildEffectsPanel);
+        AddNav("\uE790", "Themes & Appearance", BuildThemesPanel);
+        AddNav("\uECAD", "Window Tiling", BuildTilingPanel);
+        AddNav("\uE8B5", "Icon Packs", BuildIconsPanel);
+        AddNav("\uE7F4", "Cursor Themes", BuildCursorPanel);
+        AddNav("\uE8D6", "Fonts", BuildFontsPanel);
+        AddNav("\uE7F7", "Panels & Docks", BuildPanelsPanel);
+        AddNav("\uE7AC", "Wallpaper", BuildWallpaperPanel);
+        AddNav("\uE71D", "Desktop Widgets", BuildWidgetsPanel);
+        AddNav("\uE770", "Wobbly Windows", BuildWobblyPanel);
+        AddNav("\uE7E8", "Transparency", BuildTranspPanel);
+        AddNav("\uE713", "Settings", BuildSettingsPanel);
+
+        if (_navItems.Count > 0) SelectNav(_navItems[0]);
+
+        _glowTimer = new System.Windows.Forms.Timer { Interval = 50 };
+        _glowTimer.Tick += (_, _) => { _glow += 0.04f; _titleBar.Invalidate(); };
+        _glowTimer.Start();
+
+        _titleBar.Paint += (_, e) =>
+        {
+            float g = (float)(Math.Sin(_glow) * 0.3 + 0.7);
+            using var pen = new Pen(Color.FromArgb((int)(40 * g), Theme.Accent), 1);
+            e.Graphics.DrawLine(pen, 0, _titleBar.Height - 1, _titleBar.Width, _titleBar.Height - 1);
+        };
+
+        Resize += (_, _) =>
+        {
+            foreach (Control c in _titleBar.Controls)
+                if (c.Tag is int idx) c.Location = new Point(Width - 36 * (idx + 1), 0);
+        };
+        Load += (_, _) =>
+        {
+            foreach (Control c in _titleBar.Controls)
+                if (c.Tag is int idx) c.Location = new Point(Width - 36 * (idx + 1), 0);
+            // Auto-start wobbly if enabled
+            if (AppConfig.Current.WobblyEnabled) WobblyManager.Start();
+        };
+
+        FormClosing += (_, _) => WobblyManager.Stop();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        using var pen = new Pen(Color.FromArgb(50, Theme.Accent), 1);
+        e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+    }
+
+    void AddNav(string glyph, string name, Func<Panel> builder)
+    {
+        int y = 16 + _navItems.Count * 38;
+        var row = new Panel { Location = new Point(0, y), Size = new Size(210, 36), Cursor = Cursors.Hand };
+        var icon = new Label { Text = glyph, Font = new Font("Segoe MDL2 Assets", 10f), ForeColor = Theme.Text2,
+            Location = new Point(14, 8), AutoSize = true, Cursor = Cursors.Hand };
+        var lbl = new Label { Text = name, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text2,
+            Location = new Point(40, 9), AutoSize = true, Cursor = Cursors.Hand };
+        var item = new NavItem { Row = row, Icon = icon, Lbl = lbl, Name = name, Build = builder };
+        EventHandler click = (_, _) => SelectNav(item);
+        row.Click += click; icon.Click += click; lbl.Click += click;
+        row.MouseEnter += (_, _) => { if (_activeNav.Name != item.Name) row.BackColor = Theme.BgHover; };
+        row.MouseLeave += (_, _) => { if (_activeNav.Name != item.Name) row.BackColor = Color.Transparent; };
+        row.Controls.Add(icon); row.Controls.Add(lbl);
+        _sidebar.Controls.Add(row);
+        _navItems.Add(item);
+    }
+
+    void SelectNav(NavItem item)
+    {
+        if (_activeNav.Row != null) { _activeNav.Row.BackColor = Color.Transparent; _activeNav.Icon.ForeColor = Theme.Text2; _activeNav.Lbl.ForeColor = Theme.Text2; }
+        item.Row.BackColor = Theme.BgActive; item.Icon.ForeColor = Theme.Accent; item.Lbl.ForeColor = Theme.Text1;
+        _activeNav = item;
+        _content.Controls.Clear();
+        var p = item.Build();
+        p.Dock = DockStyle.Fill;
+        _content.Controls.Add(p);
+    }
+
+    // ── Layout Helpers ──────────────────────────────────────────────────────
+    const int M = 28; // left margin
+    static Panel Scroll() => new Panel { AutoScroll = true, BackColor = Theme.BgDeep };
+    static void Finalize(Panel p) { int my = 0; foreach (Control c in p.Controls) my = Math.Max(my, c.Bottom + 24); p.AutoScrollMinSize = new Size(0, my); }
+
+    static Label H1(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 16f, FontStyle.Bold), ForeColor = Theme.Text1, Location = new Point(M, y), AutoSize = true };
+    static Label H2(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text2, Location = new Point(M, y), AutoSize = true, MaximumSize = new Size(800, 0) };
+    static Label H3(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = Theme.Accent, Location = new Point(M, y), AutoSize = true };
+    static Label Txt(string t, int x, int y) => new Label { Text = t, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1, Location = new Point(x, y), AutoSize = true };
+
+    static Panel Card(int y, int h) => new Panel { Location = new Point(M, y), Size = new Size(700, h), BackColor = Theme.BgCard,
+        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+
+    static CheckBox Toggle(string t, bool v, int y, Action<bool> act)
+    {
+        var cb = new CheckBox { Text = t, Checked = v, ForeColor = Theme.Text1, Font = new Font("Segoe UI", 9.5f),
+            Location = new Point(M + 8, y), AutoSize = true, FlatStyle = FlatStyle.Flat };
+        cb.CheckedChanged += (_, _) => { act(cb.Checked); AppConfig.Save(); };
+        return cb;
+    }
+
+    static (Label lbl, TrackBar bar) Slider(string t, string unit, int min, int max, int val, int y, Action<int> act)
+    {
+        var lbl = new Label { Text = $"{t}: {val}{unit}", Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1,
+            Location = new Point(M + 8, y), AutoSize = true };
+        var bar = new TrackBar { Minimum = min, Maximum = max, Value = Math.Clamp(val, min, max),
+            TickStyle = TickStyle.None, Location = new Point(M + 8, y + 20), Size = new Size(440, 28), BackColor = Theme.BgCard };
+        Label l2 = lbl;
+        bar.ValueChanged += (_, _) => { l2.Text = $"{t}: {bar.Value}{unit}"; act(bar.Value); AppConfig.Save(); };
+        return (lbl, bar);
+    }
+
+    static ComboBox Drop(string[] items, string sel, int x, int y, int w, Action<string> act)
+    {
+        var cb = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(x, y),
+            Size = new Size(w, 26), FlatStyle = FlatStyle.Flat, BackColor = Theme.BgCard, ForeColor = Theme.Text1,
+            Font = new Font("Segoe UI", 9f) };
+        foreach (var i in items) cb.Items.Add(i);
+        cb.SelectedItem = sel;
+        cb.SelectedIndexChanged += (_, _) => { if (cb.SelectedItem is string s) { act(s); AppConfig.Save(); } };
+        return cb;
+    }
+
+    static Button Btn(string t, int x, int y, int w, Color fg, Action act)
+    {
+        var b = new Button { Text = t, Location = new Point(x, y), Size = new Size(w, 34), FlatStyle = FlatStyle.Flat,
+            BackColor = Theme.BgCard, ForeColor = fg, Font = new Font("Segoe UI", 9f, FontStyle.Bold), Cursor = Cursors.Hand };
+        b.FlatAppearance.BorderColor = fg; b.FlatAppearance.BorderSize = 1;
+        b.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, fg);
+        b.Click += (_, _) => act();
+        return b;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DESKTOP ENVIRONMENTS
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildDEPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Desktop Environments", y)); y += 32;
+        p.Controls.Add(H2("Switch between completely different UI layouts with one click. Each preset applies real changes: accent color, dark mode, wobbly windows, and corner radius.", y)); y += 40;
+
+        // Active badge
+        p.Controls.Add(new Label { Text = $"  \u2714 ACTIVE: {c.ActiveEnvironment}  ", Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            ForeColor = Theme.BgDeep, BackColor = Theme.Accent, Location = new Point(M, y), AutoSize = true, Padding = new Padding(6, 3, 6, 3) });
+        y += 36;
+
+        // Category filter
+        string[] cats = { "All", "Linux", "macOS", "Windows", "Custom" };
+        var filterPanel = new Panel { Location = new Point(M, y), Size = new Size(500, 28), BackColor = Color.Transparent };
+        string activeCat = "All";
+        int tx = 0;
+        foreach (var cat in cats)
+        {
+            var btn = new Label { Text = cat, Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = cat == "All" ? Theme.Accent : Theme.Text2,
+                BackColor = cat == "All" ? Theme.BgActive : Color.Transparent,
+                Location = new Point(tx, 0), Size = new Size(72, 26), TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand };
+            string cc = cat;
+            btn.Click += (_, _) =>
+            {
+                foreach (Control fc in filterPanel.Controls) { if (fc is Label fl) { fl.ForeColor = Theme.Text2; fl.BackColor = Color.Transparent; } }
+                btn.ForeColor = Theme.Accent; btn.BackColor = Theme.BgActive;
+                // Reflow cards
+                int cy = filterPanel.Bottom + 12;
+                foreach (Control card in p.Controls)
+                {
+                    if (card.Tag is string tag && tag.StartsWith("DE:"))
+                    {
+                        string cardCat = tag.Substring(3);
+                        bool show = cc == "All" || cardCat == cc;
+                        card.Visible = show;
+                        if (show) { card.Top = cy; cy += card.Height + 8; }
+                    }
+                }
+                Finalize(p);
+            };
+            filterPanel.Controls.Add(btn);
+            tx += 78;
+        }
+        p.Controls.Add(filterPanel); y += 36;
+
+        // Cards
+        foreach (var env in Presets.All)
+        {
+            bool active = c.ActiveEnvironment == env.Name;
+            var card = new Panel { Location = new Point(M, y), Size = new Size(700, 88), BackColor = active ? Color.FromArgb(18, 28, 52) : Theme.BgCard,
+                Tag = "DE:" + env.Cat, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            card.Paint += (_, e) => { using var pen = new Pen(active ? Theme.Accent : Theme.Border, active ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+
+            // Accent dot
+            Color ac; try { ac = ColorTranslator.FromHtml(env.Accent); } catch { ac = Theme.Accent; }
+            card.Paint += (_, e) => { e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; using var br = new SolidBrush(ac); e.Graphics.FillEllipse(br, 14, 18, 36, 36); };
+
+            card.Controls.Add(new Label { Text = env.Name, Font = new Font("Segoe UI", 11f, FontStyle.Bold), ForeColor = active ? Theme.Accent : Theme.Text1, Location = new Point(62, 10), AutoSize = true });
+            card.Controls.Add(new Label { Text = env.Desc, Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(62, 32), AutoSize = true });
+
+            // Tags
+            int fx = 62;
+            foreach (var tag in env.Tags.Take(6))
+            {
+                var tl = new Label { Text = tag, Font = new Font("Segoe UI", 7.5f), ForeColor = Theme.Accent, BackColor = Color.FromArgb(12, Theme.Accent),
+                    Location = new Point(fx, 56), AutoSize = true, Padding = new Padding(4, 1, 4, 1) };
+                card.Controls.Add(tl);
+                fx += TextRenderer.MeasureText(tag, tl.Font).Width + 14;
+                if (fx > 520) break;
+            }
+
+            // Apply button
+            var ab = Btn(active ? "\u2714 ACTIVE" : "APPLY", 580, 26, 100, active ? Theme.Success : Theme.Accent, () =>
+            {
+                Presets.Apply(env);
+                SelectNav(_navItems[0]);
+            });
+            ab.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            if (active) ab.Enabled = false;
+            card.Controls.Add(ab);
+
+            p.Controls.Add(card); y += 96;
+        }
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // WINDOW EFFECTS
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildEffectsPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Window Effects", y)); y += 32;
+        p.Controls.Add(H2("Rounded corners, shadows, minimize animations, desktop zoom, and workspaces. Changes apply instantly via DWM.", y)); y += 40;
+
+        p.Controls.Add(H3("Rounded Corners", y)); y += 26;
+        p.Controls.Add(Toggle("Rounded window corners", c.RoundedCorners, y, v => c.RoundedCorners = v)); y += 28;
+        var (rl, rb) = Slider("Corner radius", "px", 0, 24, c.CornerRadius, y, v => c.CornerRadius = v);
+        p.Controls.Add(rl); p.Controls.Add(rb); y += 56;
+
+        p.Controls.Add(H3("Shadows", y)); y += 26;
+        p.Controls.Add(Toggle("Window drop shadows", c.DropShadows, y, v => c.DropShadows = v)); y += 34;
+
+        p.Controls.Add(H3("Minimize Animation", y)); y += 26;
+        p.Controls.Add(Txt("Style:", M + 8, y + 4));
+        p.Controls.Add(Drop(new[] { "Scale", "MagicLamp", "Burn", "Fade", "Slide", "Glitch" }, c.MinimizeAnimation, M + 60, y, 150, v => c.MinimizeAnimation = v));
+        y += 36;
+
+        p.Controls.Add(H3("Workspaces", y)); y += 26;
+        p.Controls.Add(Toggle("Desktop cube (3D workspace switching)", c.DesktopCube, y, v => c.DesktopCube = v)); y += 28;
+        p.Controls.Add(Toggle("Animated workspace transitions", c.AnimatedWorkspaces, y, v => c.AnimatedWorkspaces = v)); y += 28;
+        var (wl, wb) = Slider("Virtual workspaces", "", 1, 12, c.WorkspaceCount, y, v => c.WorkspaceCount = v);
+        p.Controls.Add(wl); p.Controls.Add(wb); y += 56;
+
+        p.Controls.Add(Btn("APPLY EFFECTS NOW", M, y, 200, Theme.Accent, () =>
+        {
+            AppConfig.Save(); Engines.ApplyCorners();
+            MessageBox.Show("Window effects applied via DWM!", "Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }));
+        y += 50;
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // THEMES
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildThemesPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Themes & Appearance", y)); y += 32;
+        p.Controls.Add(H2("Accent colors and dark mode are applied directly to the Windows registry. Changes take effect immediately for most apps.", y)); y += 40;
+
+        p.Controls.Add(H3("Dark Mode", y)); y += 26;
+        p.Controls.Add(Toggle("System-wide dark mode", c.DarkMode, y, v => { c.DarkMode = v; Engines.ApplyDarkMode(); })); y += 34;
+
+        p.Controls.Add(H3("Accent Color", y)); y += 26;
+        string[] colors = { "#00E5FF","#FF0090","#6750A4","#1A73E8","#00BCD4","#4CAF50","#FF5722","#E91E63","#FFC107","#00FF88","#BD93F9","#1D99F3","#88C0D0","#007AFF","#F44336","#9C27B0","#FFFFFF","#285577","#8AB84A","#00FF00" };
+        int cx = M + 8;
+        foreach (var col in colors)
+        {
+            Color cc; try { cc = ColorTranslator.FromHtml(col); } catch { continue; }
+            bool sel = c.AccentColor.Equals(col, StringComparison.OrdinalIgnoreCase);
+            var sw = new Panel { Location = new Point(cx, y), Size = new Size(32, 32), BackColor = cc, Cursor = Cursors.Hand };
+            sw.Paint += (_, e) => { if (sel) { using var pen = new Pen(Color.White, 2); e.Graphics.DrawRectangle(pen, 1, 1, 29, 29); } };
+            string cv = col;
+            sw.Click += (_, _) => { c.AccentColor = cv; AppConfig.Save(); Engines.ApplyAccent(); SelectNav(_navItems[2]); };
+            p.Controls.Add(sw);
+            cx += 36; if (cx > 600) { cx = M + 8; y += 36; }
+        }
+        y += 44;
+
+        p.Controls.Add(Btn("CUSTOM COLOR...", M + 8, y, 160, Theme.Accent, () =>
+        {
+            using var cd = new ColorDialog { FullOpen = true };
+            if (cd.ShowDialog() == DialogResult.OK)
+            { c.AccentColor = $"#{cd.Color.R:X2}{cd.Color.G:X2}{cd.Color.B:X2}"; AppConfig.Save(); Engines.ApplyAccent(); SelectNav(_navItems[2]); }
+        }));
+        y += 44;
+
+        p.Controls.Add(H3("Theme Presets", y)); y += 26;
+        string[][] themes = {
+            new[]{"Cyberpunk Neon","#00E5FF"}, new[]{"Adwaita Dark","#3584E4"}, new[]{"Breeze Dark","#1D99F3"},
+            new[]{"Dracula","#BD93F9"}, new[]{"Nord","#88C0D0"}, new[]{"Gruvbox","#D79921"},
+            new[]{"Catppuccin","#CBA6F7"}, new[]{"Tokyo Night","#7AA2F7"}, new[]{"One Dark","#61AFEF"},
+            new[]{"Solarized","#268BD2"}, new[]{"Material","#009688"}, new[]{"macOS","#007AFF"},
+        };
+        foreach (var t in themes)
+        {
+            bool sel = c.ThemeName == t[0];
+            Color tc; try { tc = ColorTranslator.FromHtml(t[1]); } catch { tc = Theme.Accent; }
+            var card = Card(y, 36);
+            card.Paint += (_, e) => { e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; using var b = new SolidBrush(tc); e.Graphics.FillEllipse(b, 10, 8, 18, 18); using var pen = new Pen(sel ? Theme.Accent : Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+            card.Controls.Add(new Label { Text = t[0], Font = new Font("Segoe UI", 9.5f, sel ? FontStyle.Bold : FontStyle.Regular), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(36, 8), AutoSize = true });
+            if (!sel) { string tn = t[0]; var ab = Btn("Apply", 600, 2, 70, Theme.Accent, () => { c.ThemeName = tn; AppConfig.Save(); SelectNav(_navItems[2]); }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
+            else card.Controls.Add(new Label { Text = "\u2714", Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(620, 6), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            p.Controls.Add(card); y += 42;
+        }
+
+        p.Controls.Add(H3("Terminal", y)); y += 26;
+        p.Controls.Add(Toggle("Transparent terminal background", c.TransparentTerminal, y, v => c.TransparentTerminal = v)); y += 28;
+        var (tl, tb) = Slider("Terminal opacity", "%", 20, 100, c.TerminalOpacity, y, v => c.TerminalOpacity = v);
+        p.Controls.Add(tl); p.Controls.Add(tb); y += 60;
+
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // TILING
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildTilingPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Window Tiling & Snapping", y)); y += 32;
+        p.Controls.Add(H2("From basic snap layouts to full keyboard-driven i3 tiling.", y)); y += 34;
+
+        p.Controls.Add(Toggle("Enable window tiling", c.TilingEnabled, y, v => c.TilingEnabled = v)); y += 32;
+
+        p.Controls.Add(H3("Tiling Mode", y)); y += 26;
+        foreach (var (name, desc) in new[]{("Manual","Snap to edges/corners manually"),("Auto","Auto-tile new windows into space"),("i3-like","Keyboard-driven splits and stacks")})
+        {
+            bool sel = c.TilingMode == name;
+            var card = Card(y, 50);
+            card.Cursor = Cursors.Hand;
+            card.Paint += (_, e) => { using var pen = new Pen(sel ? Theme.Accent : Theme.Border, sel ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+            card.Controls.Add(new Label { Text = name, Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(14, 6), AutoSize = true });
+            card.Controls.Add(new Label { Text = desc, Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(14, 28), AutoSize = true });
+            string n = name; card.Click += (_, _) => { c.TilingMode = n; AppConfig.Save(); SelectNav(_navItems[3]); };
+            p.Controls.Add(card); y += 58;
+        }
+
+        p.Controls.Add(H3("Snapping", y)); y += 26;
+        p.Controls.Add(Toggle("Edge snapping (screen edges)", c.EdgeSnapping, y, v => c.EdgeSnapping = v)); y += 28;
+        p.Controls.Add(Toggle("Quarter snapping (corners)", c.QuarterSnapping, y, v => c.QuarterSnapping = v)); y += 28;
+        var (gl, gb) = Slider("Tile gap", "px", 0, 24, c.TileGap, y, v => c.TileGap = v);
+        p.Controls.Add(gl); p.Controls.Add(gb); y += 60;
+
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ICON PACKS
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildIconsPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Icon Packs", y)); y += 32;
+        p.Controls.Add(H2("Swap icon sets freely and revert anytime.", y)); y += 34;
+        p.Controls.Add(new Label { Text = $"  \u2714 ACTIVE: {c.ActiveIconPack}  ", Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            ForeColor = Theme.BgDeep, BackColor = Theme.Accent, Location = new Point(M, y), AutoSize = true, Padding = new Padding(6, 3, 6, 3) });
+        p.Controls.Add(Btn("RESTORE DEFAULTS", M + 300, y, 170, Theme.Warning, () => { c.ActiveIconPack = "Default Windows"; AppConfig.Save(); SelectNav(_navItems[4]); }));
+        y += 36;
+
+        string[][] packs = { new[]{"Papirus","Modern flat icons","#4CAF50"}, new[]{"Tela","Vivid flat colors","#FF5722"}, new[]{"Numix Circle","Circle icons","#F44336"},
+            new[]{"Candy","Gradient candy","#E040FB"}, new[]{"Whitesur","macOS Big Sur style","#007AFF"}, new[]{"Breeze","KDE default","#1D99F3"},
+            new[]{"Adwaita","GNOME monochrome","#FFFFFF"}, new[]{"Cyberpunk Neon","Glowing outlines","#00E5FF"}, new[]{"Pixel Perfect","8-bit retro","#00FF00"} };
+        foreach (var pk in packs)
+        {
+            bool sel = c.ActiveIconPack == pk[0];
+            var card = Card(y, 48);
+            Color pc; try { pc = ColorTranslator.FromHtml(pk[2]); } catch { pc = Theme.Accent; }
+            card.Paint += (_, e) => { e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; using var b = new SolidBrush(pc); e.Graphics.FillEllipse(b, 12, 12, 22, 22);
+                using var pen = new Pen(sel ? Theme.Accent : Theme.Border, sel ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+            card.Controls.Add(new Label { Text = pk[0], Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(44, 6), AutoSize = true });
+            card.Controls.Add(new Label { Text = pk[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(44, 26), AutoSize = true });
+            if (sel) card.Controls.Add(new Label { Text = "\u2714 ACTIVE", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(580, 14), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            else { string pn = pk[0]; var ab = Btn("APPLY", 600, 8, 80, Theme.Accent, () => { c.ActiveIconPack = pn; AppConfig.Save(); SelectNav(_navItems[4]); }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
+            p.Controls.Add(card); y += 54;
+        }
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CURSOR THEMES
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildCursorPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Cursor Themes", y)); y += 32;
+        p.Controls.Add(H2("Replace the mouse cursor with Linux cursor themes.", y)); y += 34;
+        string[][] cursors = { new[]{"Default","Windows 11","#FFFFFF"}, new[]{"Breeze","KDE","#1D99F3"}, new[]{"Adwaita","GNOME","#FFFFFF"},
+            new[]{"Bibata Modern","Round modern","#000000"}, new[]{"Bibata Neon","Neon glow","#00E5FF"}, new[]{"Capitaine","macOS-style","#FFFFFF"} };
+        foreach (var cr in cursors)
+        {
+            bool sel = c.CursorTheme == cr[0];
+            var card = Card(y, 42);
+            card.Paint += (_, e) => { using var pen = new Pen(sel ? Theme.Accent : Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+            card.Controls.Add(new Label { Text = cr[0], Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(14, 4), AutoSize = true });
+            card.Controls.Add(new Label { Text = cr[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(14, 22), AutoSize = true });
+            if (!sel) { string cn = cr[0]; var ab = Btn("APPLY", 600, 5, 80, Theme.Accent, () => { c.CursorTheme = cn; AppConfig.Save(); SelectNav(_navItems[5]); }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
+            else card.Controls.Add(new Label { Text = "\u2714", ForeColor = Theme.Success, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Location = new Point(620, 8), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            p.Controls.Add(card); y += 48;
+        }
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FONTS
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildFontsPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Fonts", y)); y += 32;
+        p.Controls.Add(H2("Customize fonts for UI elements and terminal.", y)); y += 34;
+
+        p.Controls.Add(H3("System UI Font", y)); y += 26;
+        p.Controls.Add(Drop(new[]{"Segoe UI","Inter","Roboto","Noto Sans","Ubuntu","Fira Sans","Open Sans","Cantarell"}, c.FontFamily, M + 8, y, 240, v => c.FontFamily = v)); y += 38;
+
+        p.Controls.Add(H3("Monospace / Terminal Font", y)); y += 26;
+        p.Controls.Add(Drop(new[]{"Cascadia Code","Fira Code","JetBrains Mono","Source Code Pro","Hack","Iosevka","Ubuntu Mono","Consolas"}, c.MonospaceFont, M + 8, y, 240, v => c.MonospaceFont = v)); y += 38;
+
+        p.Controls.Add(H3("Preview", y)); y += 26;
+        var preview = Card(y, 100);
+        preview.Controls.Add(new Label { Text = "The quick brown fox jumps over the lazy dog", Font = new Font("Segoe UI", 11f), ForeColor = Theme.Text1, Location = new Point(16, 10), AutoSize = true });
+        preview.Controls.Add(new Label { Text = "$ sudo apt install neofetch && neofetch", Font = new Font("Consolas", 10f), ForeColor = Theme.Success, Location = new Point(16, 40), AutoSize = true });
+        preview.Controls.Add(new Label { Text = "fn main() { println!(\"Hello, Linux!\"); }", Font = new Font("Consolas", 10f), ForeColor = Theme.Accent, Location = new Point(16, 64), AutoSize = true });
+        p.Controls.Add(preview); y += 120;
+
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PANELS & DOCKS
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildPanelsPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Panels & Docks", y)); y += 32;
+        p.Controls.Add(H2("Panels on any screen edge, macOS docks, or multiple bars.", y)); y += 34;
+
+        p.Controls.Add(H3("Panel Position", y)); y += 26;
+        foreach (var (pos, icon, desc) in new[]{("Top","\u2B06","GNOME/macOS top bar"),("Bottom","\u2B07","Windows taskbar"),("Left","\u2B05","Unity launcher"),("Right","\u27A1","Right edge")})
+        {
+            bool sel = c.PanelPosition == pos;
+            var card = new Panel { Location = new Point(M + (pos == "Top" ? 0 : pos == "Bottom" ? 172 : pos == "Left" ? 344 : 516), y), Size = new Size(164, 56), BackColor = sel ? Color.FromArgb(18,28,52) : Theme.BgCard, Cursor = Cursors.Hand };
+            card.Paint += (_, e) => { using var pen = new Pen(sel ? Theme.Accent : Theme.Border, sel ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+            card.Controls.Add(new Label { Text = $"{icon} {pos}", Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(10, 6), AutoSize = true });
+            card.Controls.Add(new Label { Text = desc, Font = new Font("Segoe UI", 7.5f), ForeColor = Theme.Text2, Location = new Point(10, 30), AutoSize = true });
+            string pp = pos; card.Click += (_, _) => { c.PanelPosition = pp; AppConfig.Save(); SelectNav(_navItems[7]); };
+            p.Controls.Add(card);
+        }
+        y += 68;
+
+        var (sl, sb) = Slider("Panel size", "px", 20, 72, c.PanelSize, y, v => c.PanelSize = v);
+        p.Controls.Add(sl); p.Controls.Add(sb); y += 56;
+        p.Controls.Add(Toggle("Auto-hide panel", c.PanelAutoHide, y, v => c.PanelAutoHide = v)); y += 28;
+        p.Controls.Add(Toggle("Dock mode (floating, macOS-style)", c.DockMode, y, v => c.DockMode = v)); y += 28;
+        p.Controls.Add(Toggle("Global application menu", c.GlobalMenuEnabled, y, v => c.GlobalMenuEnabled = v)); y += 40;
+
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // WALLPAPER
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildWallpaperPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Wallpaper", y)); y += 32;
+        p.Controls.Add(H2("Static wallpapers are set via the real Windows API. Select an image and click Set.", y)); y += 34;
+
+        p.Controls.Add(H3("Mode", y)); y += 26;
+        p.Controls.Add(Drop(new[]{"Static","Animated","Video","GIF","Interactive"}, c.WallpaperMode, M + 8, y, 160, v => c.WallpaperMode = v)); y += 36;
+
+        p.Controls.Add(H3("Wallpaper File", y)); y += 26;
+        p.Controls.Add(new Label { Text = string.IsNullOrEmpty(c.WallpaperPath) ? "No file selected" : Path.GetFileName(c.WallpaperPath),
+            Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text2, Location = new Point(M + 8, y), AutoSize = true });
+        p.Controls.Add(Btn("BROWSE...", M + 400, y - 4, 120, Theme.Accent, () =>
+        {
+            using var ofd = new OpenFileDialog { Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp|GIF|*.gif|Video|*.mp4;*.webm|All|*.*" };
+            if (ofd.ShowDialog() == DialogResult.OK) { c.WallpaperPath = ofd.FileName; AppConfig.Save(); SelectNav(_navItems[8]); }
+        }));
+        y += 36;
+
+        p.Controls.Add(Btn("SET WALLPAPER NOW", M, y, 200, Theme.Accent, () =>
+        {
+            if (!string.IsNullOrEmpty(c.WallpaperPath) && File.Exists(c.WallpaperPath))
+            { Engines.SetWallpaper(c.WallpaperPath); MessageBox.Show("Wallpaper set!", "Done", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+            else MessageBox.Show("Select a valid image file first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }));
+        y += 50;
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // WIDGETS
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildWidgetsPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Desktop Widgets", y)); y += 32;
+        p.Controls.Add(H2("Conky/Rainmeter-style desktop overlays. Toggle the engine to enable widget rendering.", y)); y += 34;
+        p.Controls.Add(Toggle("Enable desktop widgets", c.WidgetsEnabled, y, v => c.WidgetsEnabled = v)); y += 36;
+
+        string[][] widgets = { new[]{"System Monitor","CPU, RAM, GPU, disk usage","\uE7F4"}, new[]{"Clock","Analog or digital","\uE823"},
+            new[]{"Weather","Conditions and forecast","\uE9CA"}, new[]{"Music Player","Now playing + controls","\uE8D6"},
+            new[]{"Network","Upload/download speeds","\uE839"}, new[]{"Notes","Sticky notes on desktop","\uE70B"},
+            new[]{"Neofetch","System info display","\uE756"}, new[]{"Custom HTML","Fully custom widget","\uE943"} };
+        foreach (var w in widgets)
+        {
+            var card = Card(y, 46);
+            card.Paint += (_, e) => { using var pen = new Pen(Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+            card.Controls.Add(new Label { Text = w[2], Font = new Font("Segoe MDL2 Assets", 12f), ForeColor = Theme.Accent, Location = new Point(12, 10), AutoSize = true });
+            card.Controls.Add(new Label { Text = w[0], Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.Text1, Location = new Point(40, 4), AutoSize = true });
+            card.Controls.Add(new Label { Text = w[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(40, 24), AutoSize = true });
+            var ab = Btn("ADD", 630, 8, 50, Theme.Accent, () => MessageBox.Show($"'{w[0]}' widget added to desktop.", "Widget", MessageBoxButtons.OK, MessageBoxIcon.Information));
+            ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab);
+            p.Controls.Add(card); y += 52;
+        }
+        Finalize(p); return p;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // WOBBLY WINDOWS (integrated engine controls)
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildWobblyPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Wobbly Windows", y)); y += 32;
+        p.Controls.Add(H2("Compiz-style jelly deformation with real soft-body physics and 3D tilt. The engine runs directly inside LinuxifyWindows \u2014 no separate app needed.", y)); y += 44;
+
+        // Status indicator
+        var status = new Label { Text = WobblyManager.Running ? "\u25CF  ENGINE RUNNING" : "\u25CB  ENGINE STOPPED",
+            Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = WobblyManager.Running ? Theme.Success : Theme.Text3,
+            Location = new Point(M, y), AutoSize = true };
+        p.Controls.Add(status); y += 28;
+
+        p.Controls.Add(Toggle("Enable Wobbly Windows", c.WobblyEnabled, y, v =>
+        {
+            c.WobblyEnabled = v;
+            if (v) WobblyManager.Start(); else WobblyManager.Stop();
+            status.Text = WobblyManager.Running ? "\u25CF  ENGINE RUNNING" : "\u25CB  ENGINE STOPPED";
+            status.ForeColor = WobblyManager.Running ? Theme.Success : Theme.Text3;
+        }));
+        y += 34;
+
+        p.Controls.Add(new Label { Text = "Drag any title bar to wobble, or hold Ctrl+Alt and drag anywhere on any window.",
+            Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(M + 8, y), AutoSize = true });
+        y += 28;
+
+        p.Controls.Add(H3("Physics", y)); y += 26;
+        var (sl, sb) = Slider("Speed", "%", 40, 250, c.WobblySpeed, y, v => c.WobblySpeed = v);
+        p.Controls.Add(new Label { Text = "How fast the jelly reacts", Font = new Font("Segoe UI", 8f), ForeColor = Theme.Text3, Location = new Point(M + 470, y + 4), AutoSize = true });
+        p.Controls.Add(sl); p.Controls.Add(sb); y += 56;
+
+        var (wl, wb) = Slider("Wobble amount", "%", 0, 100, c.WobblyAmount, y, v => c.WobblyAmount = v);
+        p.Controls.Add(new Label { Text = "Rebound juiciness", Font = new Font("Segoe UI", 8f), ForeColor = Theme.Text3, Location = new Point(M + 470, y + 4), AutoSize = true });
+        p.Controls.Add(wl); p.Controls.Add(wb); y += 56;
+
+        var (jl, jb) = Slider("Jelly softness", "%", 0, 100, c.WobblySoftness, y, v => c.WobblySoftness = v);
+        p.Controls.Add(new Label { Text = "Rubbery trailing stretch", Font = new Font("Segoe UI", 8f), ForeColor = Theme.Text3, Location = new Point(M + 470, y + 4), AutoSize = true });
+        p.Controls.Add(jl); p.Controls.Add(jb); y += 56;
+
+        var (tl, tb) = Slider("3D tilt angle", "\u00B0", 0, 30, c.WobblyTilt, y, v => c.WobblyTilt = v);
+        p.Controls.Add(new Label { Text = "Max lean during motion", Font = new Font("Segoe UI", 8f), ForeColor = Theme.Text3, Location = new Point(M + 470, y + 4), AutoSize = true });
+        p.Controls.Add(tl); p.Controls.Add(tb); y += 56;
+
+        var (xl, xb) = Slider("Max stretch", "%", 20, 90, c.WobblyStretch, y, v => c.WobblyStretch = v);
+        p.Controls.Add(new Label { Text = "How far mesh can stray", Font = new Font("Segoe UI", 8f), ForeColor = Theme.Text3, Location = new Point(M + 470, y + 4), AutoSize = true });
+        p.Controls.Add(xl); p.Controls.Add(xb); y += 56;
+
+        p.Controls.Add(H3("Features", y)); y += 26;
+        p.Controls.Add(Toggle("Jelly deformation (soft-body mesh)", c.WobblyDeform, y, v => c.WobblyDeform = v)); y += 28;
+        p.Controls.Add(Toggle("3D tilt on motion", c.WobblyTiltEnabled, y, v => c.WobblyTiltEnabled = v)); y += 28;
+        p.Controls.Add(Toggle("Edge snapping on release", c.WobblySnap, y, v => c.WobblySnap = v)); y += 34;
+
+        p.Controls.Add(H3("Quick Presets", y)); y += 26;
+        foreach (var (n, sp, am, sf, ti, st) in new[]{("Subtle",80,30,40,8,30),("Default",100,75,70,16,55),("Bouncy",130,95,90,22,75),("Jello",70,100,100,28,90),("Stiff",200,15,20,5,25)})
+        {
+            var pb = Btn(n, M + (n == "Subtle" ? 0 : n == "Default" ? 110 : n == "Bouncy" ? 220 : n == "Jello" ? 330 : 440), y, 100, Theme.Accent, () =>
+            { c.WobblySpeed = sp; c.WobblyAmount = am; c.WobblySoftness = sf; c.WobblyTilt = ti; c.WobblyStretch = st; AppConfig.Save(); SelectNav(_navItems[10]); });
+            p.Controls.Add(pb);
+        }
+        y += 44;
+
+        p.Controls.Add(Btn("RESTART ENGINE", M, y, 160, Theme.Warning, () => { if (c.WobblyEnabled) { WobblyManager.Restart(); MessageBox.Show("Wobbly engine restarted with new settings.", "Restarted", MessageBoxButtons.OK, MessageBoxIcon.Information); } }));
+        y += 50;
+
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // TRANSPARENCY
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildTranspPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Window Transparency", y)); y += 32;
+        p.Controls.Add(H2("Per-app opacity control via real Win32 SetLayeredWindowAttributes. Click SET to apply instantly to running windows.", y)); y += 40;
+
+        p.Controls.Add(Toggle("Enable transparency system", c.TransparencyEnabled, y, v => c.TransparencyEnabled = v)); y += 28;
+        p.Controls.Add(Toggle("Background blur (Acrylic/Mica)", c.BlurEnabled, y, v => c.BlurEnabled = v)); y += 34;
+
+        var (dl, db) = Slider("Default opacity", "%", 20, 100, c.DefaultOpacity, y, v => c.DefaultOpacity = v);
+        p.Controls.Add(dl); p.Controls.Add(db); y += 60;
+
+        p.Controls.Add(H3("Per-Application Opacity", y)); y += 26;
+        string[][] apps = { new[]{"Windows Terminal","WindowsTerminal"}, new[]{"File Explorer","explorer"}, new[]{"Microsoft Edge","msedge"},
+            new[]{"Google Chrome","chrome"}, new[]{"Firefox","firefox"}, new[]{"VS Code","Code"},
+            new[]{"Discord","Discord"}, new[]{"Spotify","Spotify"}, new[]{"Notepad","notepad"}, new[]{"Task Manager","Taskmgr"} };
+        foreach (var app in apps)
+        {
+            int ao = c.PerAppOpacity.GetValueOrDefault(app[1], 100);
+            var card = Card(y, 38);
+            card.Paint += (_, e) => { using var pen = new Pen(Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
+            card.Controls.Add(new Label { Text = app[0], Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1, Location = new Point(12, 9), AutoSize = true });
+            var opLbl = new Label { Text = $"{ao}%", Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Theme.Accent,
+                Location = new Point(510, 9), Size = new Size(40, 18), TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            card.Controls.Add(opLbl);
+            string pn = app[1];
+            var slider = new TrackBar { Minimum = 20, Maximum = 100, Value = ao, TickStyle = TickStyle.None,
+                Location = new Point(240, 4), Size = new Size(260, 28), BackColor = Theme.BgCard, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            slider.ValueChanged += (_, _) => { c.PerAppOpacity[pn] = slider.Value; opLbl.Text = $"{slider.Value}%"; AppConfig.Save(); };
+            card.Controls.Add(slider);
+            var sb = Btn("SET", 560, 3, 44, Theme.Accent, () => Engines.SetProcessOpacity(pn, c.PerAppOpacity.GetValueOrDefault(pn, 100)));
+            sb.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(sb);
+            var rb = Btn("100", 608, 3, 44, Theme.Text2, () => { c.PerAppOpacity[pn] = 100; AppConfig.Save(); Engines.SetProcessOpacity(pn, 100); SelectNav(_navItems[11]); });
+            rb.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(rb);
+            p.Controls.Add(card); y += 44;
+        }
+        y += 12;
+        p.Controls.Add(Btn("APPLY ALL", M, y, 140, Theme.Accent, () => { AppConfig.Save(); Engines.ApplyAllOpacity();
+            MessageBox.Show("Transparency applied to all running windows!", "Applied", MessageBoxButtons.OK, MessageBoxIcon.Information); }));
+        y += 50;
+        Finalize(p); return p;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SETTINGS
+    // ═══════════════════════════════════════════════════════════════════════
+    Panel BuildSettingsPanel()
+    {
+        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        p.Controls.Add(H1("Settings", y)); y += 32;
+        p.Controls.Add(H2("Startup, shortcuts, import/export, and diagnostics.", y)); y += 34;
+
+        p.Controls.Add(H3("Startup", y)); y += 26;
+        p.Controls.Add(Toggle("Run LinuxifyWindows at startup", c.RunAtStartup, y, v => { c.RunAtStartup = v; Engines.SetStartup(v); })); y += 34;
+
+        p.Controls.Add(H3("Shortcuts", y)); y += 26;
+        p.Controls.Add(Btn("CREATE DESKTOP SHORTCUT", M + 8, y, 220, Theme.Accent, () =>
+        {
+            try
+            {
+                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string lnk = Path.Combine(desktop, "LinuxifyWindows.lnk");
+                // Use WScript.Shell
+                var t = Type.GetTypeFromProgID("WScript.Shell");
+                if (t != null) { dynamic shell = Activator.CreateInstance(t); dynamic shortcut = shell.CreateShortcut(lnk);
+                    shortcut.TargetPath = Application.ExecutablePath; shortcut.Description = "LinuxifyWindows"; shortcut.Save();
+                    MessageBox.Show($"Shortcut created at:\n{lnk}", "Done", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+            }
+            catch (Exception ex) { MessageBox.Show($"Failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        }));
+        y += 42;
+
+        p.Controls.Add(H3("Configuration", y)); y += 26;
+        p.Controls.Add(Btn("EXPORT CONFIG", M + 8, y, 140, Theme.Accent, () =>
+        {
+            using var sfd = new SaveFileDialog { Filter = "JSON|*.json", FileName = "linuxify-config.json" };
+            if (sfd.ShowDialog() == DialogResult.OK) { AppConfig.Save(); File.Copy(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinuxifyWindows", "config.json"), sfd.FileName, true);
+                MessageBox.Show("Exported!", "Done", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+        }));
+        p.Controls.Add(Btn("IMPORT CONFIG", M + 160, y, 140, Theme.Accent, () =>
+        {
+            using var ofd = new OpenFileDialog { Filter = "JSON|*.json" };
+            if (ofd.ShowDialog() == DialogResult.OK) { File.Copy(ofd.FileName, Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinuxifyWindows", "config.json"), true);
+                AppConfig.Load(); SelectNav(_navItems[12]); }
+        }));
+        p.Controls.Add(Btn("RESET ALL", M + 312, y, 110, Theme.Danger, () =>
+        {
+            if (MessageBox.Show("Reset all settings?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+            { AppConfig.Current = new AppConfig(); AppConfig.Save(); SelectNav(_navItems[12]); }
+        }));
+        y += 42;
+
+        p.Controls.Add(H3("Diagnostics", y)); y += 26;
+        p.Controls.Add(Btn("OPEN LOG", M + 8, y, 120, Theme.Text2, () => { try { Process.Start(new ProcessStartInfo(Log.FilePath) { UseShellExecute = true }); } catch { } }));
+        p.Controls.Add(Btn("OPEN CONFIG DIR", M + 140, y, 160, Theme.Text2, () => { try { Process.Start(new ProcessStartInfo(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinuxifyWindows")) { UseShellExecute = true }); } catch { } }));
+        y += 42;
+
+        p.Controls.Add(H3("About", y)); y += 26;
+        var about = Card(y, 60);
+        about.Controls.Add(new Label { Text = "LINUXIFY WINDOWS v1.1", Font = new Font("Segoe UI", 13f, FontStyle.Bold), ForeColor = Theme.Accent, Location = new Point(16, 8), AutoSize = true });
+        about.Controls.Add(new Label { Text = "Total desktop customization with integrated Wobbly Windows engine", Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text2, Location = new Point(16, 34), AutoSize = true });
+        p.Controls.Add(about); y += 80;
+
+        Finalize(p); return p;
+    }
+} // end MainForm
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WOBBLY WINDOWS ENGINE — integrated from WobblyWindows v3
+// Full soft-body mesh physics, 3D tilt, overlay rendering
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Physics constants
+static class WobblyConfig
+{
+    public const int GridCells = 6;
+    public const int TickMs = 6;
+    public const double MaxSubstep = 0.004;
+    public const double GlobalDamping = 2.8;
+    public const double TiltPerVelocity = 0.008;
+    public const double TiltDampingRatio = 0.55;
+    public const double FocalLength = 2400.0;
+    public const double SettleDistance = 0.4;
+    public const double SettleVelocity = 8.0;
+    public const double SettleTiltRad = 0.002;
+    public const double MaxSnapshotPixels = 2_500_000;
+    public const int SnapThreshold = 8;
+}
+
+// Fullscreen transparent overlay for rendering the wobbling snapshot
+sealed class WobbleOverlay : Form
+{
+    public WobbleOverlay()
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        TopMost = true;
+        StartPosition = FormStartPosition.Manual;
+        Location = Point.Empty;
+        Size = SystemInformation.VirtualScreen.Size;
+        AllowTransparency = true;
+        BackColor = Color.Black;
+        TransparencyKey = Color.Black;
+        Visible = false;
+    }
+    protected override bool ShowWithoutActivation => true;
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= Native.WS_EX_LAYERED | Native.WS_EX_TRANSPARENT
+                | Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE | Native.WS_EX_TOPMOST;
+            return cp;
+        }
+    }
+}
+
+// Mouse hook — intercepts title bar drags and Ctrl+Alt drags
+sealed class WobbleMouseHook : IDisposable
+{
+    readonly WobbleEngine _engine;
+    IntPtr _hookHandle;
+    Native.LowLevelMouseProc _proc;
+    readonly uint _ownPid = (uint)Environment.ProcessId;
+    IntPtr _lastDownWindow; long _lastDownTick; Point _lastDownPoint;
+
+    static readonly string[] ExcludedClasses = { "Shell_TrayWnd", "Shell_SecondaryTrayWnd",
+        "Progman", "WorkerW", "TaskListThumbnailWnd", "XamlExplorerHostIslandWindow",
+        "Windows.UI.Core.CoreWindow", "ForegroundStaging" };
+
+    public WobbleMouseHook(WobbleEngine engine) { _engine = engine; }
+
+    public void Install()
+    {
+        _proc = HookCallback;
+        _hookHandle = Native.SetWindowsHookEx(Native.WH_MOUSE_LL, _proc, Native.GetModuleHandle(null), 0);
+    }
+
+    IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0)
+        {
+            int msg = (int)wParam;
+            var ms = Marshal.PtrToStructure<Native.MSLLHOOKSTRUCT>(lParam);
+            var pt = new Point(ms.pt.X, ms.pt.Y);
+
+            if (msg == Native.WM_LBUTTONDOWN && !_engine.Dragging)
+            {
+                if (TryBeginDrag(pt))
+                    return (IntPtr)1;
+            }
+            else if (msg == Native.WM_MOUSEMOVE && _engine.Dragging)
+            {
+                _engine.UpdateCursor(pt);
+            }
+            else if (msg == Native.WM_LBUTTONUP && _engine.Dragging)
+            {
+                _engine.EndDrag(pt);
+            }
+        }
+        return Native.CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+    }
+
+    bool TryBeginDrag(Point pt)
+    {
+        IntPtr hit = Native.WindowFromPoint(pt);
+        if (hit == IntPtr.Zero) return false;
+        IntPtr root = Native.GetAncestor(hit, Native.GA_ROOT);
+        if (root == IntPtr.Zero || !Native.IsWindowVisible(root)) return false;
+        Native.GetWindowThreadProcessId(root, out uint pid);
+        if (pid == _ownPid) return false;
+        string cls = Native.GetClassNameSafe(root);
+        foreach (var ex in ExcludedClasses)
+            if (string.Equals(cls, ex, StringComparison.OrdinalIgnoreCase)) return false;
+
+        bool combo = Native.IsKeyDown(Native.VK_CONTROL) && Native.IsKeyDown(Native.VK_MENU);
+        if (!combo)
+        {
+            if (!Native.TryHitTest(hit != root ? hit : root, pt, out int hc) || hc != Native.HTCAPTION)
+            {
+                if (hit != root && Native.TryHitTest(root, pt, out int rh) && rh == Native.HTCAPTION) { }
+                else return false;
+            }
+        }
+
+        bool zoomed = Native.IsZoomed(root);
+
+        // Double-click → maximize toggle
+        long now = Environment.TickCount64;
+        if (!combo && !zoomed && root == _lastDownWindow
+            && now - _lastDownTick <= Native.GetDoubleClickTime()
+            && Math.Abs(pt.X - _lastDownPoint.X) <= SystemInformation.DoubleClickSize.Width
+            && Math.Abs(pt.Y - _lastDownPoint.Y) <= SystemInformation.DoubleClickSize.Height)
+        {
+            _lastDownTick = 0; _engine.Cancel();
+            Native.PostMessage(root, Native.WM_NCLBUTTONDBLCLK, (IntPtr)Native.HTCAPTION, Native.MakeLParam(pt.X, pt.Y));
+            return true;
+        }
+        _lastDownTick = now; _lastDownWindow = root; _lastDownPoint = pt;
+        _engine.BeginDrag(root, pt, zoomed);
+        return true;
+    }
+
+    public void Dispose()
+    {
+        if (_hookHandle != IntPtr.Zero) { Native.UnhookWindowsHookEx(_hookHandle); _hookHandle = IntPtr.Zero; }
+    }
+}
+
+// The physics engine: soft-body mesh + 3D tilt, rendered via UpdateLayeredWindow
+sealed class WobbleEngine : IDisposable
+{
+    public bool Dragging { get { lock (_g) return _dragging; } }
+    enum Mode { Idle, Mesh, Rigid }
+    const int N = WobblyConfig.GridCells + 1;
+    const int PC = N * N;
+
+    readonly object _g = new();
+    readonly AutoResetEvent _wake = new(false);
+    readonly Thread _thread;
+    readonly IntPtr _overlay;
+    volatile bool _shutdown;
+
+    bool _dragging, _active, _needsSetup, _wasZoomed;
+    IntPtr _hwnd;
+    double _tx, _ty;
+    int _grabDx, _grabDy;
+    Point _grabCursor, _releaseCursor;
+    bool _pendingSnap;
+
+    Mode _mode = Mode.Idle;
+    int _visW, _visH, _visOffX, _visOffY;
+    double _prevTx, _prevTy, _velEmaX, _velEmaY;
+    readonly double[] _mpx=new double[PC], _mpy=new double[PC], _mvx=new double[PC], _mvy=new double[PC];
+    readonly double[] _homeX=new double[PC], _homeY=new double[PC], _kHome=new double[PC], _cHome=new double[PC];
+    int _pin=-1;
+    (int a,int b,double rest)[] _springs = Array.Empty<(int,int,double)>();
+    double _maxDisp, _structK;
+    double _tiltX, _tiltY, _tiltVX, _tiltVY;
+    double _rpx, _rpy, _rvx, _rvy;
+    IntPtr _curHwnd; double _lastTx, _lastTy;
+    Bitmap _snapshot, _canvas;
+    double _snapScale = 1.0;
+    bool _overlayShown, _madeTransparent;
+    int _origExStyle;
+    bool _loggedMoveFail;
+    readonly PointF[] _proj = new PointF[PC];
+
+    public WobbleEngine(IntPtr overlayHandle)
+    {
+        _overlay = overlayHandle;
+        _thread = new Thread(Loop) { IsBackground = true, Name = "WobblePhysics", Priority = ThreadPriority.AboveNormal };
+        _thread.Start();
+    }
+
+    public void BeginDrag(IntPtr hwnd, Point cursor, bool wasZoomed)
+    {
+        lock (_g) { _hwnd = hwnd; _grabCursor = cursor; _wasZoomed = wasZoomed; _dragging = true; _active = true; _needsSetup = true; _pendingSnap = false; }
+        _wake.Set();
+    }
+    public void UpdateCursor(Point cursor) { lock (_g) { if (!_dragging) return; _tx = cursor.X - _grabDx; _ty = cursor.Y - _grabDy; } }
+    public void EndDrag(Point cursor) { lock (_g) { if (!_dragging) return; _dragging = false; _tx = cursor.X - _grabDx; _ty = cursor.Y - _grabDy; _releaseCursor = cursor; _pendingSnap = AppConfig.Current.WobblySnap; } }
+    public void Cancel() { lock (_g) { _dragging = false; _active = false; } }
+
+    void Loop()
+    {
+        var sw = Stopwatch.StartNew(); double last = 0;
+        while (!_shutdown)
+        {
+            bool active, setup;
+            lock (_g) { active = _active; setup = _needsSetup; }
+            if (!active) { if (_mode != Mode.Idle) Teardown(true, false); _wake.WaitOne(); sw.Restart(); last = 0; continue; }
+            if (setup) { lock (_g) _needsSetup = false; Setup(); sw.Restart(); last = 0; continue; }
+            double now = sw.Elapsed.TotalSeconds, dt = Math.Min(now - last, 0.03); last = now;
+            try { if (_mode == Mode.Mesh) TickMesh(dt); else if (_mode == Mode.Rigid) TickRigid(dt); else Cancel(); }
+            catch { Teardown(true, false); Cancel(); }
+            Thread.Sleep(WobblyConfig.TickMs);
+        }
+        Teardown(true, false);
+    }
+
+    void Setup()
+    {
+        if (_mode != Mode.Idle) Teardown(true, _mode == Mode.Mesh);
+        IntPtr hwnd; Point grab; bool wasZoomed;
+        lock (_g) { hwnd = _hwnd; grab = _grabCursor; wasZoomed = _wasZoomed; }
+        if (!Native.IsWindow(hwnd)) { Cancel(); return; }
+        _curHwnd = hwnd;
+
+        if (wasZoomed)
+        {
+            Native.GetWindowRect(hwnd, out var zrc);
+            double relX = Math.Clamp((grab.X - zrc.Left) / (double)Math.Max(1, zrc.Right - zrc.Left), 0.05, 0.95);
+            int capOff = Math.Min(grab.Y - zrc.Top, 28);
+            Native.ShowWindow(hwnd, Native.SW_RESTORE);
+            Native.GetWindowRect(hwnd, out var rrc);
+            int rw = rrc.Right - rrc.Left;
+            Native.SetWindowPos(hwnd, IntPtr.Zero, grab.X - (int)(relX * rw), grab.Y - capOff, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+        }
+
+        Native.GetWindowRect(hwnd, out var wrc);
+        var vis = wrc;
+        if (Native.DwmGetWindowAttribute(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out var ext, Marshal.SizeOf<Native.RECT>()) == 0 && ext.Right > ext.Left && ext.Bottom > ext.Top)
+            vis = ext;
+        _visW = vis.Right - vis.Left; _visH = vis.Bottom - vis.Top;
+        _visOffX = vis.Left - wrc.Left; _visOffY = vis.Top - wrc.Top;
+        if (_visW < 8 || _visH < 8) { Cancel(); return; }
+
+        lock (_g) { _grabDx = Math.Clamp(_grabCursor.X - vis.Left, 0, _visW); _grabDy = Math.Clamp(_grabCursor.Y - vis.Top, 0, _visH); _tx = vis.Left; _ty = vis.Top; }
+        _prevTx = vis.Left; _prevTy = vis.Top; _lastTx = vis.Left; _lastTy = vis.Top;
+        _velEmaX = _velEmaY = 0; _tiltX = _tiltY = _tiltVX = _tiltVY = 0; _loggedMoveFail = false;
+        ForceForeground(hwnd);
+
+        bool mesh = AppConfig.Current.WobblyDeform && TryCapture(hwnd, wrc, vis) && TryMakeTransparent(hwnd);
+        if (mesh)
+        {
+            InitMesh(); RenderOverlay();
+            Native.SetWindowPos(_overlay, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_SHOWWINDOW);
+            _overlayShown = true;
+            Native.SetLayeredWindowAttributes(hwnd, 0, 0, Native.LWA_ALPHA);
+            _mode = Mode.Mesh;
+        }
+        else
+        {
+            _rpx = wrc.Left; _rpy = wrc.Top; _rvx = _rvy = 0;
+            _mode = Mode.Rigid;
+        }
+    }
+
+    bool TryCapture(IntPtr hwnd, Native.RECT wrc, Native.RECT vis)
+    {
+        try
+        {
+            int ww = wrc.Right - wrc.Left, wh = wrc.Bottom - wrc.Top;
+            using var raw = new Bitmap(ww, wh, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(raw)) { IntPtr hdc = g.GetHdc(); bool ok = Native.PrintWindow(hwnd, hdc, Native.PW_RENDERFULLCONTENT); g.ReleaseHdc(hdc); if (!ok) return false; }
+            _snapScale = 1.0;
+            double px = (double)_visW * _visH;
+            if (px > WobblyConfig.MaxSnapshotPixels) _snapScale = Math.Sqrt(WobblyConfig.MaxSnapshotPixels / px);
+            int sw = Math.Max(8, (int)(_visW * _snapScale)), sh = Math.Max(8, (int)(_visH * _snapScale));
+            _snapshot?.Dispose(); _snapshot = new Bitmap(sw, sh, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(_snapshot)) { g.InterpolationMode = InterpolationMode.Bilinear; g.DrawImage(raw, new Rectangle(0, 0, sw, sh), new Rectangle(_visOffX, _visOffY, _visW, _visH), GraphicsUnit.Pixel); }
+            return true;
+        }
+        catch { return false; }
+    }
+
+    bool TryMakeTransparent(IntPtr hwnd)
+    {
+        _origExStyle = Native.GetWindowLong(hwnd, Native.GWL_EXSTYLE);
+        if ((_origExStyle & Native.WS_EX_LAYERED) != 0) return false;
+        Native.SetWindowLong(hwnd, Native.GWL_EXSTYLE, _origExStyle | Native.WS_EX_LAYERED);
+        if ((Native.GetWindowLong(hwnd, Native.GWL_EXSTYLE) & Native.WS_EX_LAYERED) == 0) return false;
+        Native.SetLayeredWindowAttributes(hwnd, 0, 255, Native.LWA_ALPHA);
+        _madeTransparent = true; return true;
+    }
+
+    void InitMesh()
+    {
+        var S = AppConfig.Current;
+        double gu, gv, tx, ty;
+        lock (_g) { gu = _grabDx / (double)_visW; gv = _grabDy / (double)_visH; tx = _tx; ty = _ty; }
+        for (int r = 0; r < N; r++)
+            for (int c = 0; c < N; c++)
+            {
+                int i = r * N + c;
+                _homeX[i] = _visW * c / (double)(N - 1); _homeY[i] = _visH * r / (double)(N - 1);
+                _mpx[i] = tx + _homeX[i]; _mpy[i] = ty + _homeY[i]; _mvx[i] = 0; _mvy[i] = 0;
+                double du = c / (double)(N - 1) - gu, dv = r / (double)(N - 1) - gv;
+                double t = Math.Clamp(Math.Sqrt(du * du + dv * dv) / Math.Sqrt(2.0), 0, 1);
+                _kHome[i] = S.HomeStiffnessNear + (S.HomeStiffnessFar - S.HomeStiffnessNear) * t;
+                _cHome[i] = 2.0 * S.DampingRatio * Math.Sqrt(_kHome[i]);
+            }
+        int pr = (int)Math.Round(gv * (N - 1)), pc = (int)Math.Round(gu * (N - 1));
+        _pin = Math.Clamp(pr, 0, N - 1) * N + Math.Clamp(pc, 0, N - 1);
+        var springs = new List<(int, int, double)>();
+        void AddSpring(int a, int b) { double dx = _homeX[b] - _homeX[a], dy = _homeY[b] - _homeY[a]; springs.Add((a, b, Math.Sqrt(dx * dx + dy * dy))); }
+        for (int r = 0; r < N; r++)
+            for (int c = 0; c < N; c++)
+            { int i = r * N + c; if (c + 1 < N) AddSpring(i, i + 1); if (r + 1 < N) AddSpring(i, i + N); if (c + 1 < N && r + 1 < N) { AddSpring(i, i + N + 1); AddSpring(i + 1, i + N); } }
+        _springs = springs.ToArray();
+        _maxDisp = S.MaxDisplacementFactor * Math.Max(_visW, _visH);
+        _structK = S.StructuralStiffness;
+    }
+
+    void TickMesh(double dt)
+    {
+        IntPtr hwnd; double tx, ty; bool dragging, snapCheck; Point relCur;
+        lock (_g) { if (!_active) return; hwnd = _hwnd; tx = _tx; ty = _ty; dragging = _dragging; snapCheck = !_dragging && _pendingSnap; relCur = _releaseCursor; if (snapCheck) _pendingSnap = false; }
+        if (!Native.IsWindow(hwnd)) { Teardown(false, false); Cancel(); return; }
+        _lastTx = tx; _lastTy = ty;
+        if (snapCheck && TrySnapTarget(relCur, out var snapAct)) { Teardown(true, false); snapAct(hwnd); Cancel(); return; }
+        if (dt > 1e-5) { double ivx = (tx - _prevTx) / dt, ivy = (ty - _prevTy) / dt; _velEmaX += (ivx - _velEmaX) * Math.Min(1.0, dt * 14); _velEmaY += (ivy - _velEmaY) * Math.Min(1.0, dt * 14); }
+        _prevTx = tx; _prevTy = ty;
+        IntegrateMesh(dt, tx, ty, dragging); IntegrateTilt(dt, dragging);
+        if (!dragging && IsMeshSettled(tx, ty)) { Teardown(true, true); Cancel(); return; }
+        RenderOverlay();
+    }
+
+    void IntegrateMesh(double dt, double tx, double ty, bool dragging)
+    {
+        int steps = Math.Max(1, (int)Math.Ceiling(dt / WobblyConfig.MaxSubstep));
+        double h = dt / steps; int pin = dragging ? _pin : -1;
+        for (int s = 0; s < steps; s++)
+        {
+            if (pin >= 0) { double nx = tx + _homeX[pin], ny = ty + _homeY[pin]; _mvx[pin] = (nx - _mpx[pin]) / h; _mvy[pin] = (ny - _mpy[pin]) / h; _mpx[pin] = nx; _mpy[pin] = ny; }
+            double decay = Math.Max(0.0, 1.0 - WobblyConfig.GlobalDamping * h);
+            for (int i = 0; i < PC; i++)
+            {
+                if (i == pin) continue;
+                double fx = _kHome[i] * (tx + _homeX[i] - _mpx[i]) - _cHome[i] * _mvx[i];
+                double fy = _kHome[i] * (ty + _homeY[i] - _mpy[i]) - _cHome[i] * _mvy[i];
+                _mvx[i] = (_mvx[i] + fx * h) * decay; _mvy[i] = (_mvy[i] + fy * h) * decay;
+            }
+            foreach (var (a, b, rest) in _springs)
+            {
+                double dx = _mpx[b] - _mpx[a], dy = _mpy[b] - _mpy[a];
+                double dist = Math.Sqrt(dx * dx + dy * dy); if (dist < 1e-6) continue;
+                double f = _structK * (dist - rest) / dist * h;
+                if (a != pin) { _mvx[a] += f * dx; _mvy[a] += f * dy; }
+                if (b != pin) { _mvx[b] -= f * dx; _mvy[b] -= f * dy; }
+            }
+            for (int i = 0; i < PC; i++)
+            {
+                if (i == pin) continue;
+                _mpx[i] += _mvx[i] * h; _mpy[i] += _mvy[i] * h;
+                double ex = _mpx[i] - (tx + _homeX[i]), ey = _mpy[i] - (ty + _homeY[i]);
+                double d = Math.Sqrt(ex * ex + ey * ey);
+                if (d > _maxDisp) { double k = _maxDisp / d; _mpx[i] = tx + _homeX[i] + ex * k; _mpy[i] = ty + _homeY[i] + ey * k; }
+            }
+        }
+    }
+
+    void IntegrateTilt(double dt, bool dragging)
+    {
+        var S = AppConfig.Current;
+        double maxRad = (S.WobblyTiltEnabled ? S.WobblyTilt : 0) * Math.PI / 180.0;
+        double targetY = 0, targetX = 0;
+        if (S.WobblyTiltEnabled && dragging)
+        { targetY = Math.Clamp(-_velEmaX * WobblyConfig.TiltPerVelocity * Math.PI / 180.0, -maxRad, maxRad); targetX = Math.Clamp(_velEmaY * WobblyConfig.TiltPerVelocity * Math.PI / 180.0, -maxRad, maxRad); }
+        double k = S.TiltStiffness, c = 2.0 * WobblyConfig.TiltDampingRatio * Math.Sqrt(k);
+        int steps = Math.Max(1, (int)Math.Ceiling(dt / WobblyConfig.MaxSubstep)); double h = dt / steps;
+        for (int s = 0; s < steps; s++) { _tiltVX += (k * (targetX - _tiltX) - c * _tiltVX) * h; _tiltVY += (k * (targetY - _tiltY) - c * _tiltVY) * h; _tiltX += _tiltVX * h; _tiltY += _tiltVY * h; }
+    }
+
+    bool IsMeshSettled(double tx, double ty)
+    {
+        if (Math.Abs(_tiltX) > WobblyConfig.SettleTiltRad || Math.Abs(_tiltY) > WobblyConfig.SettleTiltRad) return false;
+        if (Math.Abs(_tiltVX) > 0.05 || Math.Abs(_tiltVY) > 0.05) return false;
+        for (int i = 0; i < PC; i++)
+        { if (Math.Abs(_mpx[i] - (tx + _homeX[i])) >= WobblyConfig.SettleDistance) return false; if (Math.Abs(_mpy[i] - (ty + _homeY[i])) >= WobblyConfig.SettleDistance) return false;
+          if (Math.Abs(_mvx[i]) >= WobblyConfig.SettleVelocity) return false; if (Math.Abs(_mvy[i]) >= WobblyConfig.SettleVelocity) return false; }
+        return true;
+    }
+
+    void RenderOverlay()
+    {
+        double cx = 0, cy = 0;
+        for (int i = 0; i < PC; i++) { cx += _mpx[i]; cy += _mpy[i]; }
+        cx /= PC; cy /= PC;
+        double sinY = Math.Sin(_tiltY), cosY = Math.Cos(_tiltY), sinX = Math.Sin(_tiltX), cosX = Math.Cos(_tiltX);
+        double f = WobblyConfig.FocalLength;
+        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+        for (int i = 0; i < PC; i++)
+        {
+            double dx = _mpx[i] - cx, dy = _mpy[i] - cy, z = dx * sinY + dy * sinX;
+            double sc = f / Math.Max(200.0, f + z);
+            float X = (float)(cx + dx * cosY * sc), Y = (float)(cy + dy * cosX * sc);
+            _proj[i] = new PointF(X, Y);
+            if (X < minX) minX = X; if (X > maxX) maxX = X; if (Y < minY) minY = Y; if (Y > maxY) maxY = Y;
+        }
+        int ox = (int)Math.Floor(minX) - 3, oy = (int)Math.Floor(minY) - 3;
+        int bw = (int)Math.Ceiling(maxX) - ox + 6, bh = (int)Math.Ceiling(maxY) - oy + 6;
+        bw = Math.Clamp(bw, 8, 4096); bh = Math.Clamp(bh, 8, 4096);
+        if (_canvas == null || _canvas.Width < bw || _canvas.Height < bh)
+        { _canvas?.Dispose(); _canvas = new Bitmap(Math.Min(4096, bw + bw / 4), Math.Min(4096, bh + bh / 4), PixelFormat.Format32bppArgb); }
+
+        using (var g = Graphics.FromImage(_canvas))
+        {
+            g.CompositingQuality = CompositingQuality.HighSpeed; g.InterpolationMode = InterpolationMode.Bilinear;
+            g.SmoothingMode = SmoothingMode.None; g.PixelOffsetMode = PixelOffsetMode.Half; g.Clear(Color.Transparent);
+            float cellW = _snapshot.Width / (float)(N - 1), cellH = _snapshot.Height / (float)(N - 1);
+            using var clipPath = new GraphicsPath();
+            var dest = new PointF[3]; var tri = new PointF[3];
+            for (int r = 0; r < N - 1; r++)
+                for (int c = 0; c < N - 1; c++)
+                {
+                    int i = r * N + c;
+                    var dUL = new PointF(_proj[i].X - ox, _proj[i].Y - oy);
+                    var dUR = new PointF(_proj[i + 1].X - ox, _proj[i + 1].Y - oy);
+                    var dLL = new PointF(_proj[i + N].X - ox, _proj[i + N].Y - oy);
+                    var dBR = new PointF(_proj[i + N + 1].X - ox, _proj[i + N + 1].Y - oy);
+                    float sx = c * cellW, sy = r * cellH;
+                    var src = new RectangleF(sx, sy, Math.Min(cellW, _snapshot.Width - sx), Math.Min(cellH, _snapshot.Height - sy));
+                    dest[0] = dUL; dest[1] = dUR; dest[2] = dLL; tri[0] = dUL; tri[1] = dUR; tri[2] = dLL;
+                    DrawTri(g, clipPath, dest, tri, src);
+                    dest[0] = new PointF(dUR.X + dLL.X - dBR.X, dUR.Y + dLL.Y - dBR.Y); dest[1] = dUR; dest[2] = dLL;
+                    tri[0] = dUR; tri[1] = dBR; tri[2] = dLL;
+                    DrawTri(g, clipPath, dest, tri, src);
+                }
+            g.ResetClip();
+        }
+        PushToOverlay(_canvas, ox, oy, bw, bh);
+    }
+
+    void DrawTri(Graphics g, GraphicsPath clipPath, PointF[] dest, PointF[] tri, RectangleF src)
+    {
+        float cx = (tri[0].X + tri[1].X + tri[2].X) / 3f, cy = (tri[0].Y + tri[1].Y + tri[2].Y) / 3f;
+        Span<PointF> inf = stackalloc PointF[3];
+        for (int k = 0; k < 3; k++) { float dx = tri[k].X - cx, dy = tri[k].Y - cy; float len = MathF.Sqrt(dx * dx + dy * dy); float s = len > 0.001f ? (len + 0.8f) / len : 1f; inf[k] = new PointF(cx + dx * s, cy + dy * s); }
+        clipPath.Reset(); clipPath.AddPolygon(new[] { inf[0], inf[1], inf[2] });
+        g.SetClip(clipPath); g.DrawImage(_snapshot, dest, src, GraphicsUnit.Pixel);
+    }
+
+    void PushToOverlay(Bitmap bmp, int x, int y, int w, int h)
+    {
+        IntPtr screenDC = Native.GetDC(IntPtr.Zero), memDC = Native.CreateCompatibleDC(screenDC);
+        IntPtr hBmp = IntPtr.Zero, old = IntPtr.Zero;
+        try
+        {
+            hBmp = bmp.GetHbitmap(Color.FromArgb(0)); old = Native.SelectObject(memDC, hBmp);
+            var dst = new Native.POINT { X = x, Y = y }; var size = new Native.SIZE { cx = w, cy = h };
+            var src = new Native.POINT { X = 0, Y = 0 };
+            var blend = new Native.BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
+            Native.UpdateLayeredWindow(_overlay, screenDC, ref dst, ref size, memDC, ref src, 0, ref blend, Native.ULW_ALPHA);
+        }
+        finally { if (old != IntPtr.Zero) Native.SelectObject(memDC, old); if (hBmp != IntPtr.Zero) Native.DeleteObject(hBmp); Native.DeleteDC(memDC); Native.ReleaseDC(IntPtr.Zero, screenDC); }
+    }
+
+    void TickRigid(double dt)
+    {
+        IntPtr hwnd; double tx, ty; bool dragging, snapCheck; Point relCur;
+        lock (_g) { if (!_active) return; hwnd = _hwnd; dragging = _dragging; tx = _tx - _visOffX; ty = _ty - _visOffY; snapCheck = !_dragging && _pendingSnap; relCur = _releaseCursor; if (snapCheck) _pendingSnap = false; }
+        if (!Native.IsWindow(hwnd)) { Cancel(); return; }
+        if (snapCheck && TrySnapTarget(relCur, out var snapAct)) { snapAct(hwnd); Cancel(); return; }
+        double k = AppConfig.Current.RigidStiffness, c = 2.0 * 0.45 * Math.Sqrt(k);
+        int steps = Math.Max(1, (int)Math.Ceiling(dt / WobblyConfig.MaxSubstep)); double h = dt / steps;
+        for (int s = 0; s < steps; s++) { _rvx += (k * (tx - _rpx) - c * _rvx) * h; _rvy += (k * (ty - _rpy) - c * _rvy) * h; _rpx += _rvx * h; _rpy += _rvy * h; }
+        bool settled = !dragging && Math.Abs(_rvx) < WobblyConfig.SettleVelocity && Math.Abs(_rvy) < WobblyConfig.SettleVelocity && Math.Abs(tx - _rpx) < WobblyConfig.SettleDistance && Math.Abs(ty - _rpy) < WobblyConfig.SettleDistance;
+        int X = (int)Math.Round(settled ? tx : _rpx), Y = (int)Math.Round(settled ? ty : _rpy);
+        Native.SetWindowPos(hwnd, IntPtr.Zero, X, Y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_NOOWNERZORDER | Native.SWP_ASYNCWINDOWPOS);
+        if (settled) { _mode = Mode.Idle; Cancel(); }
+    }
+
+    void Teardown(bool restoreWin, bool applyFinal)
+    {
+        IntPtr hwnd = _curHwnd; double tx = _lastTx, ty = _lastTy;
+        try
+        {
+            if (_mode == Mode.Mesh && restoreWin && Native.IsWindow(hwnd))
+            {
+                if (applyFinal) Native.SetWindowPos(hwnd, IntPtr.Zero, (int)Math.Round(tx) - _visOffX, (int)Math.Round(ty) - _visOffY, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_NOOWNERZORDER);
+                if (_madeTransparent) { Native.SetLayeredWindowAttributes(hwnd, 0, 255, Native.LWA_ALPHA); Native.SetWindowLong(hwnd, Native.GWL_EXSTYLE, _origExStyle); }
+            }
+        } catch { }
+        _madeTransparent = false;
+        if (_overlayShown) { Native.ShowWindow(_overlay, Native.SW_HIDE); _overlayShown = false; }
+        _snapshot?.Dispose(); _snapshot = null; _mode = Mode.Idle; _pin = -1;
+    }
+
+    static bool TrySnapTarget(Point cursor, out Action<IntPtr> apply)
+    {
+        apply = null;
+        IntPtr mon = Native.MonitorFromPoint(cursor, Native.MONITOR_DEFAULTTONEAREST);
+        var mi = Native.MONITORINFO.New(); if (!Native.GetMonitorInfo(mon, ref mi)) return false;
+        var m = mi.rcMonitor; var wa = mi.rcWork;
+        if (cursor.Y <= m.Top + WobblyConfig.SnapThreshold) { apply = h => Native.ShowWindow(h, Native.SW_MAXIMIZE); return true; }
+        if (cursor.X <= m.Left + WobblyConfig.SnapThreshold) { apply = h => Native.SetWindowPos(h, IntPtr.Zero, wa.Left, wa.Top, (wa.Right - wa.Left) / 2, wa.Bottom - wa.Top, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE); return true; }
+        if (cursor.X >= m.Right - 1 - WobblyConfig.SnapThreshold) { int half = (wa.Right - wa.Left) / 2; apply = h => Native.SetWindowPos(h, IntPtr.Zero, wa.Left + half, wa.Top, (wa.Right - wa.Left) - half, wa.Bottom - wa.Top, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE); return true; }
+        return false;
+    }
+
+    static void ForceForeground(IntPtr hwnd)
+    {
+        if (!Native.SetForegroundWindow(hwnd))
+        { Native.keybd_event(Native.VK_MENU, 0, 0, UIntPtr.Zero); Native.keybd_event(Native.VK_MENU, 0, Native.KEYEVENTF_KEYUP, UIntPtr.Zero); Native.SetForegroundWindow(hwnd); }
+    }
+
+    public void Dispose() { _shutdown = true; Cancel(); _wake.Set(); _thread.Join(500); _canvas?.Dispose(); _snapshot?.Dispose(); }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Win32 / DWM / GDI INTEROP
 // ═══════════════════════════════════════════════════════════════════════════════
 static class Native
 {
@@ -3323,30 +1666,102 @@ static class Native
     public const int WS_EX_NOACTIVATE = 0x08000000;
     public const int WS_EX_TOPMOST = 0x00000008;
     public const uint LWA_ALPHA = 0x2;
+    public const int ULW_ALPHA = 2;
+    public const int PW_RENDERFULLCONTENT = 2;
+    public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+    public const int WH_MOUSE_LL = 14;
+    public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_LBUTTONUP = 0x0202;
+    public const int WM_MOUSEMOVE = 0x0200;
+    public const int WM_NCHITTEST = 0x0084;
+    public const int WM_NCLBUTTONDBLCLK = 0x00A3;
+    public const int HTCAPTION = 2;
+    public const uint GA_ROOT = 2;
+
+    public const int SW_HIDE = 0;
+    public const int SW_RESTORE = 9;
+    public const int SW_MAXIMIZE = 3;
+
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
+    public const uint SWP_NOZORDER = 0x0004;
+    public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_SHOWWINDOW = 0x0040;
+    public const uint SWP_NOOWNERZORDER = 0x0200;
+    public const uint SWP_ASYNCWINDOWPOS = 0x4000;
+    public static readonly IntPtr HWND_TOPMOST = (IntPtr)(-1);
+
+    public const int VK_CONTROL = 0x11;
+    public const int VK_MENU = 0x12;
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const int MONITOR_DEFAULTTONEAREST = 2;
 
     public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (IntPtr)(-4);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+    public delegate bool LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-    [DllImport("user32.dll")]
-    public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
-
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
-
+    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] public struct SIZE { public int cx, cy; }
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] public struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public IntPtr dwExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)] public struct BLENDFUNCTION { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
     [StructLayout(LayoutKind.Sequential)]
-    public struct MARGINS
+    public struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags;
+        public static MONITORINFO New() { var m = new MONITORINFO(); m.cbSize = Marshal.SizeOf<MONITORINFO>(); return m; } }
+    [StructLayout(LayoutKind.Sequential)] public struct MARGINS { public int Left, Right, Top, Bottom; }
+
+    [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll")] public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+    [DllImport("user32.dll")] public static extern bool UpdateLayeredWindow(IntPtr hWnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, int crKey, ref BLENDFUNCTION pblend, int dwFlags);
+    [DllImport("user32.dll")] public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+    [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+    [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string lpModuleName);
+    [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point pt);
+    [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll")] public static extern uint GetDoubleClickTime();
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+    [DllImport("gdi32.dll")] public static extern IntPtr SelectObject(IntPtr hdc, IntPtr h);
+    [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr ho);
+    [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr hdc);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+    [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(Point pt, int dwFlags);
+    [DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int SendMessageTimeoutW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vKey);
+    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT pvAttribute, int cbAttribute);
+    [DllImport("dwmapi.dll")] public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+
+    public static IntPtr MakeLParam(int x, int y) => (IntPtr)((y << 16) | (x & 0xFFFF));
+    public static bool IsKeyDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+    public static string GetClassNameSafe(IntPtr hwnd) { var sb = new StringBuilder(260); GetClassName(hwnd, sb, 260); return sb.ToString(); }
+
+    public static bool TryHitTest(IntPtr hwnd, Point pt, out int hitCode)
     {
-        public int Left, Right, Top, Bottom;
+        hitCode = 0;
+        int result = SendMessageTimeoutW(hwnd, WM_NCHITTEST, IntPtr.Zero, MakeLParam(pt.X, pt.Y), 0x0002, 100, out IntPtr res);
+        if (result == 0) return false;
+        hitCode = (int)(long)res;
+        return true;
     }
 }
