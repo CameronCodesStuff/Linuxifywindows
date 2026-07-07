@@ -443,7 +443,7 @@ sealed class MainForm : Form
         {
             var b = new Label { Text = txt, Font = new Font("Segoe UI", 10f), ForeColor = Theme.Text2,
                 TextAlign = ContentAlignment.MiddleCenter, Size = new Size(36, 36), Tag = idx, Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                };
             int ii = idx;
             b.Click += (_, _) => act();
             if (ii == 0) { b.MouseEnter += (_, _) => b.BackColor = Theme.Danger; b.MouseLeave += (_, _) => b.BackColor = Color.Transparent; }
@@ -557,7 +557,7 @@ sealed class MainForm : Form
     static Label Txt(string t, int x, int y) => new Label { Text = t, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1, Location = new Point(x, y), AutoSize = true };
 
     static Panel Card(int y, int h) => new Panel { Location = new Point(M, y), Size = new Size(620, h), BackColor = Theme.BgCard,
-        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        };
 
     static CheckBox Toggle(string t, bool v, int y, Action<bool> act)
     {
@@ -583,7 +583,7 @@ sealed class MainForm : Form
     {
         var b = new Button { Text = text, Size = new Size(w, 30), FlatStyle = FlatStyle.Flat,
             BackColor = Theme.BgCard, ForeColor = fg, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), Cursor = Cursors.Hand,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            };
         b.Location = new Point(card.Width - fromRight - w, y);
         b.FlatAppearance.BorderColor = fg; b.FlatAppearance.BorderSize = 1;
         b.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, fg);
@@ -594,7 +594,7 @@ sealed class MainForm : Form
     static void AddCardLabel(Panel card, string text, int fromRight, int y, Color fg)
     {
         card.Controls.Add(new Label { Text = text, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = fg,
-            Location = new Point(card.Width - fromRight, y), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            Location = new Point(card.Width - fromRight, y), AutoSize = true });
     }
 
     static ComboBox Drop(string[] items, string sel, int x, int y, int w, Action<string> act)
@@ -672,7 +672,7 @@ sealed class MainForm : Form
         {
             bool active = c.ActiveEnvironment == env.Name;
             var card = new Panel { Location = new Point(M, y), Size = new Size(620, 88), BackColor = active ? Color.FromArgb(18, 28, 52) : Theme.BgCard,
-                Tag = "DE:" + env.Cat, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+                Tag = "DE:" + env.Cat, };
             card.Paint += (_, e) => { using var pen = new Pen(active ? Theme.Accent : Theme.Border, active ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
 
             // Accent dot
