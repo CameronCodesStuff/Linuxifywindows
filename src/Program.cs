@@ -464,6 +464,11 @@ sealed class MainForm : Form
                 if (c.Tag is int idx) c.Location = new Point(Width - 36 * (idx + 1), 0);
             // Auto-start wobbly if enabled
             if (AppConfig.Current.WobblyEnabled) WobblyManager.Start();
+            // Auto-apply transparency if enabled
+            if (AppConfig.Current.TransparencyEnabled) Engines.ApplyAllOpacity();
+            // Apply accent and dark mode
+            Engines.ApplyAccent();
+            Engines.ApplyDarkMode();
         };
 
         FormClosing += (_, _) => WobblyManager.Stop();
@@ -515,7 +520,7 @@ sealed class MainForm : Form
     static Label H3(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = Theme.Accent, Location = new Point(M, y), AutoSize = true };
     static Label Txt(string t, int x, int y) => new Label { Text = t, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1, Location = new Point(x, y), AutoSize = true };
 
-    static Panel Card(int y, int h) => new Panel { Location = new Point(M, y), Size = new Size(700, h), BackColor = Theme.BgCard,
+    static Panel Card(int y, int h) => new Panel { Location = new Point(M, y), Size = new Size(880, h), BackColor = Theme.BgCard,
         Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
     static CheckBox Toggle(string t, bool v, int y, Action<bool> act)
@@ -611,7 +616,7 @@ sealed class MainForm : Form
         foreach (var env in Presets.All)
         {
             bool active = c.ActiveEnvironment == env.Name;
-            var card = new Panel { Location = new Point(M, y), Size = new Size(700, 88), BackColor = active ? Color.FromArgb(18, 28, 52) : Theme.BgCard,
+            var card = new Panel { Location = new Point(M, y), Size = new Size(880, 88), BackColor = active ? Color.FromArgb(18, 28, 52) : Theme.BgCard,
                 Tag = "DE:" + env.Cat, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
             card.Paint += (_, e) => { using var pen = new Pen(active ? Theme.Accent : Theme.Border, active ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
 
@@ -735,8 +740,13 @@ sealed class MainForm : Form
             var card = Card(y, 36);
             card.Paint += (_, e) => { e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; using var b = new SolidBrush(tc); e.Graphics.FillEllipse(b, 10, 8, 18, 18); using var pen = new Pen(sel ? Theme.Accent : Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = t[0], Font = new Font("Segoe UI", 9.5f, sel ? FontStyle.Bold : FontStyle.Regular), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(36, 8), AutoSize = true });
-            if (!sel) { string tn = t[0]; var ab = Btn("Apply", 600, 2, 70, Theme.Accent, () => { c.ThemeName = tn; AppConfig.Save(); SelectNav(_navItems[2]); }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
-            else card.Controls.Add(new Label { Text = "\u2714", Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(620, 6), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            if (!sel) { string tn = t[0]; string tc2 = t[1]; var ab = Btn("Apply", 780, 2, 70, Theme.Accent, () =>
+                {
+                    c.ThemeName = tn; c.AccentColor = tc2; AppConfig.Save();
+                    Engines.ApplyAccent();
+                    SelectNav(_navItems[2]);
+                }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
+            else card.Controls.Add(new Label { Text = "\u2714", Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(800, 6), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
             p.Controls.Add(card); y += 42;
         }
 
@@ -806,8 +816,13 @@ sealed class MainForm : Form
                 using var pen = new Pen(sel ? Theme.Accent : Theme.Border, sel ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = pk[0], Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(44, 6), AutoSize = true });
             card.Controls.Add(new Label { Text = pk[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(44, 26), AutoSize = true });
-            if (sel) card.Controls.Add(new Label { Text = "\u2714 ACTIVE", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(580, 14), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
-            else { string pn = pk[0]; var ab = Btn("APPLY", 600, 8, 80, Theme.Accent, () => { c.ActiveIconPack = pn; AppConfig.Save(); SelectNav(_navItems[4]); }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
+            if (sel) card.Controls.Add(new Label { Text = "\u2714 ACTIVE", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(760, 14), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            else { string pn = pk[0]; var ab = Btn("APPLY", 770, 8, 80, Theme.Accent, () =>
+                {
+                    c.ActiveIconPack = pn; AppConfig.Save();
+                    MessageBox.Show($"Icon pack set to '{pn}'.\n\nTo install this icon pack on Windows, use 7TSP or CustomizerGod to patch system icons. Download the pack from gnome-look.org and follow the tool's instructions.", "Icon Pack", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    SelectNav(_navItems[4]);
+                }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
             p.Controls.Add(card); y += 54;
         }
         Finalize(p); return p;
@@ -830,8 +845,13 @@ sealed class MainForm : Form
             card.Paint += (_, e) => { using var pen = new Pen(sel ? Theme.Accent : Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = cr[0], Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(14, 4), AutoSize = true });
             card.Controls.Add(new Label { Text = cr[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(14, 22), AutoSize = true });
-            if (!sel) { string cn = cr[0]; var ab = Btn("APPLY", 600, 5, 80, Theme.Accent, () => { c.CursorTheme = cn; AppConfig.Save(); SelectNav(_navItems[5]); }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
-            else card.Controls.Add(new Label { Text = "\u2714", ForeColor = Theme.Success, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Location = new Point(620, 8), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            if (!sel) { string cn = cr[0]; var ab = Btn("APPLY", 770, 5, 80, Theme.Accent, () =>
+                {
+                    c.CursorTheme = cn; AppConfig.Save();
+                    MessageBox.Show($"Cursor theme set to '{cn}'.\n\nTo actually install this cursor theme, download it from gnome-look.org or similar, then apply via Windows Settings > Bluetooth & devices > Mouse > Additional mouse settings > Pointers.", "Cursor Theme", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    SelectNav(_navItems[5]);
+                }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
+            else card.Controls.Add(new Label { Text = "\u2714", ForeColor = Theme.Success, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Location = new Point(800, 8), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
             p.Controls.Add(card); y += 48;
         }
         Finalize(p); return p;
@@ -946,7 +966,7 @@ sealed class MainForm : Form
             card.Controls.Add(new Label { Text = w[2], Font = new Font("Segoe MDL2 Assets", 12f), ForeColor = Theme.Accent, Location = new Point(12, 10), AutoSize = true });
             card.Controls.Add(new Label { Text = w[0], Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.Text1, Location = new Point(40, 4), AutoSize = true });
             card.Controls.Add(new Label { Text = w[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(40, 24), AutoSize = true });
-            var ab = Btn("ADD", 630, 8, 50, Theme.Accent, () => MessageBox.Show($"'{w[0]}' widget added to desktop.", "Widget", MessageBoxButtons.OK, MessageBoxIcon.Information));
+            var ab = Btn("ADD", 800, 8, 50, Theme.Accent, () => MessageBox.Show($"'{w[0]}' widget added to desktop.", "Widget", MessageBoxButtons.OK, MessageBoxIcon.Information));
             ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab);
             p.Controls.Add(card); y += 52;
         }
@@ -1049,16 +1069,16 @@ sealed class MainForm : Form
             card.Paint += (_, e) => { using var pen = new Pen(Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = app[0], Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1, Location = new Point(12, 9), AutoSize = true });
             var opLbl = new Label { Text = $"{ao}%", Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Theme.Accent,
-                Location = new Point(510, 9), Size = new Size(40, 18), TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                Location = new Point(700, 9), Size = new Size(40, 18), TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right };
             card.Controls.Add(opLbl);
             string pn = app[1];
             var slider = new TrackBar { Minimum = 20, Maximum = 100, Value = ao, TickStyle = TickStyle.None,
-                Location = new Point(240, 4), Size = new Size(260, 28), BackColor = Theme.BgCard, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+                Location = new Point(240, 4), Size = new Size(470, 28), BackColor = Theme.BgCard, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
             slider.ValueChanged += (_, _) => { c.PerAppOpacity[pn] = slider.Value; opLbl.Text = $"{slider.Value}%"; AppConfig.Save(); };
             card.Controls.Add(slider);
-            var sb = Btn("SET", 560, 3, 44, Theme.Accent, () => Engines.SetProcessOpacity(pn, c.PerAppOpacity.GetValueOrDefault(pn, 100)));
+            var sb = Btn("SET", 730, 3, 44, Theme.Accent, () => Engines.SetProcessOpacity(pn, c.PerAppOpacity.GetValueOrDefault(pn, 100)));
             sb.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(sb);
-            var rb = Btn("100", 608, 3, 44, Theme.Text2, () => { c.PerAppOpacity[pn] = 100; AppConfig.Save(); Engines.SetProcessOpacity(pn, 100); SelectNav(_navItems[11]); });
+            var rb = Btn("100", 780, 3, 44, Theme.Text2, () => { c.PerAppOpacity[pn] = 100; AppConfig.Save(); Engines.SetProcessOpacity(pn, 100); SelectNav(_navItems[11]); });
             rb.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(rb);
             p.Controls.Add(card); y += 44;
         }
@@ -1168,12 +1188,8 @@ sealed class WobbleOverlay : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        Location = Point.Empty;
+        Location = SystemInformation.VirtualScreen.Location;
         Size = SystemInformation.VirtualScreen.Size;
-        AllowTransparency = true;
-        BackColor = Color.Black;
-        TransparencyKey = Color.Black;
-        Visible = false;
     }
     protected override bool ShowWithoutActivation => true;
     protected override CreateParams CreateParams
@@ -1182,7 +1198,7 @@ sealed class WobbleOverlay : Form
         {
             var cp = base.CreateParams;
             cp.ExStyle |= Native.WS_EX_LAYERED | Native.WS_EX_TRANSPARENT
-                | Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE | Native.WS_EX_TOPMOST;
+                | Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE;
             return cp;
         }
     }
@@ -1246,13 +1262,34 @@ sealed class WobbleMouseHook : IDisposable
         foreach (var ex in ExcludedClasses)
             if (string.Equals(cls, ex, StringComparison.OrdinalIgnoreCase)) return false;
 
+        // Ctrl+Alt held → wobble-drag from anywhere on any window
         bool combo = Native.IsKeyDown(Native.VK_CONTROL) && Native.IsKeyDown(Native.VK_MENU);
+
+        int hitCode = -1;
         if (!combo)
         {
-            if (!Native.TryHitTest(hit != root ? hit : root, pt, out int hc) || hc != Native.HTCAPTION)
+            // Try the child under the cursor first, then the root.
+            // HTCAPTION covers native title bars AND custom drag regions
+            // (Chrome tab strip, Discord's Electron drag area, etc.)
+            if (hit != root && Native.TryHitTest(hit, pt, out int childHit)
+                && childHit == Native.HTCAPTION)
             {
-                if (hit != root && Native.TryHitTest(root, pt, out int rh) && rh == Native.HTCAPTION) { }
-                else return false;
+                hitCode = childHit;
+            }
+            else if (Native.TryHitTest(root, pt, out int rootHit))
+            {
+                hitCode = rootHit;
+            }
+            else
+            {
+                // hit-test timed out (elevated app?) — let native drag handle it
+                return false;
+            }
+
+            if (hitCode != Native.HTCAPTION)
+            {
+                // Click is not on the title bar — pass through to the app
+                return false;
             }
         }
 
