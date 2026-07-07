@@ -214,8 +214,24 @@ static class Presets
         c.DefaultOpacity = p.Opacity; c.RoundedCorners = p.Round; c.CornerRadius = p.Radius;
         c.MinimizeAnimation = p.MinAnim; c.DarkMode = true;
         AppConfig.Save();
-        Engines.ApplyAccent(); Engines.ApplyDarkMode();
+        Engines.ApplyAccent(); Engines.ApplyDarkMode(); Engines.ApplyCorners();
+        if (p.Transp && p.Opacity < 100)
+        {
+            c.TransparencyEnabled = true;
+            c.DefaultOpacity = p.Opacity;
+            Native.EnumWindows((hwnd, _) =>
+            {
+                if (Native.IsWindowVisible(hwnd))
+                {
+                    Native.GetWindowThreadProcessId(hwnd, out uint pid);
+                    if (pid != (uint)Environment.ProcessId)
+                        Engines.SetWindowOpacity(hwnd, p.Opacity);
+                }
+                return true;
+            }, IntPtr.Zero);
+        }
         if (p.Wobbly) WobblyManager.Start(); else WobblyManager.Stop();
+        MessageBox.Show($"Applied: {p.Name}\n\n\u2022 Accent color: {p.Accent}\n\u2022 Dark mode: ON\n\u2022 Corners: {(p.Round ? $"rounded ({p.Radius}px)" : "square")}\n\u2022 Transparency: {(p.Transp ? $"{p.Opacity}%" : "off")}\n\u2022 Wobbly: {(p.Wobbly ? "ON" : "off")}\n\u2022 Tiling: {p.Tiling}", "Environment Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 }
 
@@ -290,9 +306,29 @@ static class Engines
     {
         try
         {
+            var pids = new HashSet<uint>();
             foreach (var proc in Process.GetProcessesByName(processName))
+            {
+                pids.Add((uint)proc.Id);
+                // Try MainWindowHandle first
                 if (proc.MainWindowHandle != IntPtr.Zero)
                     SetWindowOpacity(proc.MainWindowHandle, pct);
+            }
+            // Also enumerate all top-level windows and match by PID
+            // This catches console windows (cmd, powershell) that don't report MainWindowHandle
+            if (pids.Count > 0)
+            {
+                Native.EnumWindows((hwnd, _) =>
+                {
+                    if (Native.IsWindowVisible(hwnd))
+                    {
+                        Native.GetWindowThreadProcessId(hwnd, out uint pid);
+                        if (pids.Contains(pid))
+                            SetWindowOpacity(hwnd, pct);
+                    }
+                    return true;
+                }, IntPtr.Zero);
+            }
             Log.Write($"Opacity {processName} = {pct}%");
         }
         catch (Exception ex) { Log.Write($"SetProcessOpacity({processName}): {ex.Message}"); }
@@ -516,11 +552,11 @@ sealed class MainForm : Form
     static void Finalize(Panel p) { int my = 0; foreach (Control c in p.Controls) my = Math.Max(my, c.Bottom + 24); p.AutoScrollMinSize = new Size(0, my); }
 
     static Label H1(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 16f, FontStyle.Bold), ForeColor = Theme.Text1, Location = new Point(M, y), AutoSize = true };
-    static Label H2(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text2, Location = new Point(M, y), AutoSize = true, MaximumSize = new Size(800, 0) };
+    static Label H2(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text2, Location = new Point(M, y), AutoSize = true, MaximumSize = new Size(600, 0) };
     static Label H3(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 10.5f, FontStyle.Bold), ForeColor = Theme.Accent, Location = new Point(M, y), AutoSize = true };
     static Label Txt(string t, int x, int y) => new Label { Text = t, Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1, Location = new Point(x, y), AutoSize = true };
 
-    static Panel Card(int y, int h) => new Panel { Location = new Point(M, y), Size = new Size(880, h), BackColor = Theme.BgCard,
+    static Panel Card(int y, int h) => new Panel { Location = new Point(M, y), Size = new Size(620, h), BackColor = Theme.BgCard,
         Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
     static CheckBox Toggle(string t, bool v, int y, Action<bool> act)
@@ -536,10 +572,29 @@ sealed class MainForm : Form
         var lbl = new Label { Text = $"{t}: {val}{unit}", Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1,
             Location = new Point(M + 8, y), AutoSize = true };
         var bar = new TrackBar { Minimum = min, Maximum = max, Value = Math.Clamp(val, min, max),
-            TickStyle = TickStyle.None, Location = new Point(M + 8, y + 20), Size = new Size(440, 28), BackColor = Theme.BgCard };
+            TickStyle = TickStyle.None, Location = new Point(M + 8, y + 20), Size = new Size(340, 28), BackColor = Theme.BgCard };
         Label l2 = lbl;
         bar.ValueChanged += (_, _) => { l2.Text = $"{t}: {bar.Value}{unit}"; act(bar.Value); AppConfig.Save(); };
         return (lbl, bar);
+    }
+
+    // Add a button to a card, right-aligned (always visible regardless of card width)
+    static void AddCardBtn(Panel card, string text, int fromRight, int y, int w, Color fg, Action act)
+    {
+        var b = new Button { Text = text, Size = new Size(w, 30), FlatStyle = FlatStyle.Flat,
+            BackColor = Theme.BgCard, ForeColor = fg, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), Cursor = Cursors.Hand,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right };
+        b.Location = new Point(card.Width - fromRight - w, y);
+        b.FlatAppearance.BorderColor = fg; b.FlatAppearance.BorderSize = 1;
+        b.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, fg);
+        b.Click += (_, _) => act();
+        card.Controls.Add(b);
+    }
+
+    static void AddCardLabel(Panel card, string text, int fromRight, int y, Color fg)
+    {
+        card.Controls.Add(new Label { Text = text, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = fg,
+            Location = new Point(card.Width - fromRight, y), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
     }
 
     static ComboBox Drop(string[] items, string sel, int x, int y, int w, Action<string> act)
@@ -616,7 +671,7 @@ sealed class MainForm : Form
         foreach (var env in Presets.All)
         {
             bool active = c.ActiveEnvironment == env.Name;
-            var card = new Panel { Location = new Point(M, y), Size = new Size(880, 88), BackColor = active ? Color.FromArgb(18, 28, 52) : Theme.BgCard,
+            var card = new Panel { Location = new Point(M, y), Size = new Size(620, 88), BackColor = active ? Color.FromArgb(18, 28, 52) : Theme.BgCard,
                 Tag = "DE:" + env.Cat, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
             card.Paint += (_, e) => { using var pen = new Pen(active ? Theme.Accent : Theme.Border, active ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
 
@@ -639,14 +694,10 @@ sealed class MainForm : Form
             }
 
             // Apply button
-            var ab = Btn(active ? "\u2714 ACTIVE" : "APPLY", 580, 26, 100, active ? Theme.Success : Theme.Accent, () =>
-            {
-                Presets.Apply(env);
-                SelectNav(_navItems[0]);
-            });
-            ab.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            if (active) ab.Enabled = false;
-            card.Controls.Add(ab);
+            if (!active)
+                AddCardBtn(card, "APPLY", 10, 30, 90, Theme.Accent, () => { Presets.Apply(env); SelectNav(_navItems[0]); });
+            else
+                AddCardLabel(card, "\u2714 ACTIVE", 90, 34, Theme.Success);
 
             p.Controls.Add(card); y += 96;
         }
@@ -740,13 +791,9 @@ sealed class MainForm : Form
             var card = Card(y, 36);
             card.Paint += (_, e) => { e.Graphics.SmoothingMode = SmoothingMode.AntiAlias; using var b = new SolidBrush(tc); e.Graphics.FillEllipse(b, 10, 8, 18, 18); using var pen = new Pen(sel ? Theme.Accent : Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = t[0], Font = new Font("Segoe UI", 9.5f, sel ? FontStyle.Bold : FontStyle.Regular), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(36, 8), AutoSize = true });
-            if (!sel) { string tn = t[0]; string tc2 = t[1]; var ab = Btn("Apply", 780, 2, 70, Theme.Accent, () =>
-                {
-                    c.ThemeName = tn; c.AccentColor = tc2; AppConfig.Save();
-                    Engines.ApplyAccent();
-                    SelectNav(_navItems[2]);
-                }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
-            else card.Controls.Add(new Label { Text = "\u2714", Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(800, 6), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+            if (!sel) { string tn = t[0]; string tc2 = t[1]; AddCardBtn(card, "Apply", 10, 3, 70, Theme.Accent, () =>
+                { c.ThemeName = tn; c.AccentColor = tc2; AppConfig.Save(); Engines.ApplyAccent(); SelectNav(_navItems[2]); }); }
+            else AddCardLabel(card, "\u2714", 30, 8, Theme.Success);
             p.Controls.Add(card); y += 42;
         }
 
@@ -816,13 +863,13 @@ sealed class MainForm : Form
                 using var pen = new Pen(sel ? Theme.Accent : Theme.Border, sel ? 2 : 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = pk[0], Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(44, 6), AutoSize = true });
             card.Controls.Add(new Label { Text = pk[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(44, 26), AutoSize = true });
-            if (sel) card.Controls.Add(new Label { Text = "\u2714 ACTIVE", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Theme.Success, Location = new Point(760, 14), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
-            else { string pn = pk[0]; var ab = Btn("APPLY", 770, 8, 80, Theme.Accent, () =>
+            if (sel) AddCardLabel(card, "\u2714 ACTIVE", 90, 16, Theme.Success);
+            else { string pn = pk[0]; AddCardBtn(card, "APPLY", 10, 8, 80, Theme.Accent, () =>
                 {
                     c.ActiveIconPack = pn; AppConfig.Save();
                     MessageBox.Show($"Icon pack set to '{pn}'.\n\nTo install this icon pack on Windows, use 7TSP or CustomizerGod to patch system icons. Download the pack from gnome-look.org and follow the tool's instructions.", "Icon Pack", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     SelectNav(_navItems[4]);
-                }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
+                }); }
             p.Controls.Add(card); y += 54;
         }
         Finalize(p); return p;
@@ -845,13 +892,13 @@ sealed class MainForm : Form
             card.Paint += (_, e) => { using var pen = new Pen(sel ? Theme.Accent : Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = cr[0], Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = sel ? Theme.Accent : Theme.Text1, Location = new Point(14, 4), AutoSize = true });
             card.Controls.Add(new Label { Text = cr[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(14, 22), AutoSize = true });
-            if (!sel) { string cn = cr[0]; var ab = Btn("APPLY", 770, 5, 80, Theme.Accent, () =>
+            if (!sel) { string cn = cr[0]; AddCardBtn(card, "APPLY", 10, 6, 80, Theme.Accent, () =>
                 {
                     c.CursorTheme = cn; AppConfig.Save();
                     MessageBox.Show($"Cursor theme set to '{cn}'.\n\nTo actually install this cursor theme, download it from gnome-look.org or similar, then apply via Windows Settings > Bluetooth & devices > Mouse > Additional mouse settings > Pointers.", "Cursor Theme", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     SelectNav(_navItems[5]);
-                }); ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab); }
-            else card.Controls.Add(new Label { Text = "\u2714", ForeColor = Theme.Success, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Location = new Point(800, 8), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right });
+                }); }
+            else AddCardLabel(card, "\u2714", 30, 10, Theme.Success);
             p.Controls.Add(card); y += 48;
         }
         Finalize(p); return p;
@@ -966,8 +1013,8 @@ sealed class MainForm : Form
             card.Controls.Add(new Label { Text = w[2], Font = new Font("Segoe MDL2 Assets", 12f), ForeColor = Theme.Accent, Location = new Point(12, 10), AutoSize = true });
             card.Controls.Add(new Label { Text = w[0], Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.Text1, Location = new Point(40, 4), AutoSize = true });
             card.Controls.Add(new Label { Text = w[1], Font = new Font("Segoe UI", 8.5f), ForeColor = Theme.Text2, Location = new Point(40, 24), AutoSize = true });
-            var ab = Btn("ADD", 800, 8, 50, Theme.Accent, () => MessageBox.Show($"'{w[0]}' widget added to desktop.", "Widget", MessageBoxButtons.OK, MessageBoxIcon.Information));
-            ab.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(ab);
+            string wn = w[0];
+            AddCardBtn(card, "ADD", 10, 8, 50, Theme.Accent, () => MessageBox.Show($"'{wn}' widget added to desktop.", "Widget", MessageBoxButtons.OK, MessageBoxIcon.Information));
             p.Controls.Add(card); y += 52;
         }
         Finalize(p); return p;
@@ -1059,9 +1106,11 @@ sealed class MainForm : Form
         p.Controls.Add(dl); p.Controls.Add(db); y += 60;
 
         p.Controls.Add(H3("Per-Application Opacity", y)); y += 26;
-        string[][] apps = { new[]{"Windows Terminal","WindowsTerminal"}, new[]{"File Explorer","explorer"}, new[]{"Microsoft Edge","msedge"},
+        p.Controls.Add(H2("Drag slider then click SET. Works on any running window.", y)); y += 22;
+        string[][] apps = { new[]{"Windows Terminal","WindowsTerminal"}, new[]{"Command Prompt","cmd"},
+            new[]{"File Explorer","explorer"}, new[]{"Microsoft Edge","msedge"},
             new[]{"Google Chrome","chrome"}, new[]{"Firefox","firefox"}, new[]{"VS Code","Code"},
-            new[]{"Discord","Discord"}, new[]{"Spotify","Spotify"}, new[]{"Notepad","notepad"}, new[]{"Task Manager","Taskmgr"} };
+            new[]{"Discord","Discord"}, new[]{"Spotify","Spotify"}, new[]{"Notepad","Notepad"}, new[]{"Task Manager","Taskmgr"} };
         foreach (var app in apps)
         {
             int ao = c.PerAppOpacity.GetValueOrDefault(app[1], 100);
@@ -1069,22 +1118,39 @@ sealed class MainForm : Form
             card.Paint += (_, e) => { using var pen = new Pen(Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1); };
             card.Controls.Add(new Label { Text = app[0], Font = new Font("Segoe UI", 9f), ForeColor = Theme.Text1, Location = new Point(12, 9), AutoSize = true });
             var opLbl = new Label { Text = $"{ao}%", Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Theme.Accent,
-                Location = new Point(700, 9), Size = new Size(40, 18), TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                Location = new Point(160, 9), Size = new Size(40, 18), TextAlign = ContentAlignment.MiddleRight };
             card.Controls.Add(opLbl);
             string pn = app[1];
             var slider = new TrackBar { Minimum = 20, Maximum = 100, Value = ao, TickStyle = TickStyle.None,
-                Location = new Point(240, 4), Size = new Size(470, 28), BackColor = Theme.BgCard, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+                Location = new Point(210, 4), Size = new Size(250, 28), BackColor = Theme.BgCard };
             slider.ValueChanged += (_, _) => { c.PerAppOpacity[pn] = slider.Value; opLbl.Text = $"{slider.Value}%"; AppConfig.Save(); };
             card.Controls.Add(slider);
-            var sb = Btn("SET", 730, 3, 44, Theme.Accent, () => Engines.SetProcessOpacity(pn, c.PerAppOpacity.GetValueOrDefault(pn, 100)));
-            sb.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(sb);
-            var rb = Btn("100", 780, 3, 44, Theme.Text2, () => { c.PerAppOpacity[pn] = 100; AppConfig.Save(); Engines.SetProcessOpacity(pn, 100); SelectNav(_navItems[11]); });
-            rb.Anchor = AnchorStyles.Top | AnchorStyles.Right; card.Controls.Add(rb);
+            AddCardBtn(card, "SET", 54, 4, 44, Theme.Accent, () => Engines.SetProcessOpacity(pn, c.PerAppOpacity.GetValueOrDefault(pn, 100)));
+            AddCardBtn(card, "100", 6, 4, 44, Theme.Text2, () => { c.PerAppOpacity[pn] = 100; AppConfig.Save(); Engines.SetProcessOpacity(pn, 100); SelectNav(_navItems[11]); });
             p.Controls.Add(card); y += 44;
         }
         y += 12;
-        p.Controls.Add(Btn("APPLY ALL", M, y, 140, Theme.Accent, () => { AppConfig.Save(); Engines.ApplyAllOpacity();
-            MessageBox.Show("Transparency applied to all running windows!", "Applied", MessageBoxButtons.OK, MessageBoxIcon.Information); }));
+        p.Controls.Add(Btn("APPLY ALL TO RUNNING WINDOWS", M, y, 280, Theme.Accent, () =>
+        {
+            AppConfig.Save();
+            // Apply to every configured app
+            Engines.ApplyAllOpacity();
+            // Also apply default opacity to all visible windows
+            if (c.TransparencyEnabled && c.DefaultOpacity < 100)
+            {
+                Native.EnumWindows((hwnd, _) =>
+                {
+                    if (Native.IsWindowVisible(hwnd))
+                    {
+                        Native.GetWindowThreadProcessId(hwnd, out uint pid);
+                        if (pid != (uint)Environment.ProcessId)
+                            Engines.SetWindowOpacity(hwnd, c.DefaultOpacity);
+                    }
+                    return true;
+                }, IntPtr.Zero);
+            }
+            MessageBox.Show("Transparency applied!", "Applied", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }));
         y += 50;
         Finalize(p); return p;
     }
