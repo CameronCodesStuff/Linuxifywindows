@@ -507,7 +507,7 @@ sealed class MainForm : Form
 
     // ── Layout Helpers ──────────────────────────────────────────────────────
     const int M = 28; // left margin
-    static Panel Scroll() => new Panel { AutoScroll = true, BackColor = Theme.BgDeep };
+    static new Panel MakeScroll() => new Panel { AutoScroll = true, BackColor = Theme.BgDeep };
     static void Finalize(Panel p) { int my = 0; foreach (Control c in p.Controls) my = Math.Max(my, c.Bottom + 24); p.AutoScrollMinSize = new Size(0, my); }
 
     static Label H1(string t, int y) => new Label { Text = t, Font = new Font("Segoe UI", 16f, FontStyle.Bold), ForeColor = Theme.Text1, Location = new Point(M, y), AutoSize = true };
@@ -564,7 +564,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildDEPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Desktop Environments", y)); y += 32;
         p.Controls.Add(H2("Switch between completely different UI layouts with one click. Each preset applies real changes: accent color, dark mode, wobbly windows, and corner radius.", y)); y += 40;
 
@@ -576,7 +576,6 @@ sealed class MainForm : Form
         // Category filter
         string[] cats = { "All", "Linux", "macOS", "Windows", "Custom" };
         var filterPanel = new Panel { Location = new Point(M, y), Size = new Size(500, 28), BackColor = Color.Transparent };
-        string activeCat = "All";
         int tx = 0;
         foreach (var cat in cats)
         {
@@ -654,7 +653,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildEffectsPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Window Effects", y)); y += 32;
         p.Controls.Add(H2("Rounded corners, shadows, minimize animations, desktop zoom, and workspaces. Changes apply instantly via DWM.", y)); y += 40;
 
@@ -691,7 +690,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildThemesPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Themes & Appearance", y)); y += 32;
         p.Controls.Add(H2("Accent colors and dark mode are applied directly to the Windows registry. Changes take effect immediately for most apps.", y)); y += 40;
 
@@ -754,7 +753,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildTilingPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Window Tiling & Snapping", y)); y += 32;
         p.Controls.Add(H2("From basic snap layouts to full keyboard-driven i3 tiling.", y)); y += 34;
 
@@ -787,7 +786,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildIconsPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Icon Packs", y)); y += 32;
         p.Controls.Add(H2("Swap icon sets freely and revert anytime.", y)); y += 34;
         p.Controls.Add(new Label { Text = $"  \u2714 ACTIVE: {c.ActiveIconPack}  ", Font = new Font("Segoe UI", 9f, FontStyle.Bold),
@@ -819,7 +818,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildCursorPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Cursor Themes", y)); y += 32;
         p.Controls.Add(H2("Replace the mouse cursor with Linux cursor themes.", y)); y += 34;
         string[][] cursors = { new[]{"Default","Windows 11","#FFFFFF"}, new[]{"Breeze","KDE","#1D99F3"}, new[]{"Adwaita","GNOME","#FFFFFF"},
@@ -843,7 +842,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildFontsPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Fonts", y)); y += 32;
         p.Controls.Add(H2("Customize fonts for UI elements and terminal.", y)); y += 34;
 
@@ -868,7 +867,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildPanelsPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Panels & Docks", y)); y += 32;
         p.Controls.Add(H2("Panels on any screen edge, macOS docks, or multiple bars.", y)); y += 34;
 
@@ -899,7 +898,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildWallpaperPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Wallpaper", y)); y += 32;
         p.Controls.Add(H2("Static wallpapers are set via the real Windows API. Select an image and click Set.", y)); y += 34;
 
@@ -931,7 +930,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildWidgetsPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Desktop Widgets", y)); y += 32;
         p.Controls.Add(H2("Conky/Rainmeter-style desktop overlays. Toggle the engine to enable widget rendering.", y)); y += 34;
         p.Controls.Add(Toggle("Enable desktop widgets", c.WidgetsEnabled, y, v => c.WidgetsEnabled = v)); y += 36;
@@ -960,7 +959,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildWobblyPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Wobbly Windows", y)); y += 32;
         p.Controls.Add(H2("Compiz-style jelly deformation with real soft-body physics and 3D tilt. The engine runs directly inside LinuxifyWindows \u2014 no separate app needed.", y)); y += 44;
 
@@ -1029,7 +1028,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildTranspPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Window Transparency", y)); y += 32;
         p.Controls.Add(H2("Per-app opacity control via real Win32 SetLayeredWindowAttributes. Click SET to apply instantly to running windows.", y)); y += 40;
 
@@ -1075,7 +1074,7 @@ sealed class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════
     Panel BuildSettingsPanel()
     {
-        var p = Scroll(); var c = AppConfig.Current; int y = 12;
+        var p = MakeScroll(); var c = AppConfig.Current; int y = 12;
         p.Controls.Add(H1("Settings", y)); y += 32;
         p.Controls.Add(H2("Startup, shortcuts, import/export, and diagnostics.", y)); y += 34;
 
@@ -1317,7 +1316,7 @@ sealed class WobbleEngine : IDisposable
     double _snapScale = 1.0;
     bool _overlayShown, _madeTransparent;
     int _origExStyle;
-    bool _loggedMoveFail;
+    
     readonly PointF[] _proj = new PointF[PC];
 
     public WobbleEngine(IntPtr overlayHandle)
@@ -1382,7 +1381,7 @@ sealed class WobbleEngine : IDisposable
 
         lock (_g) { _grabDx = Math.Clamp(_grabCursor.X - vis.Left, 0, _visW); _grabDy = Math.Clamp(_grabCursor.Y - vis.Top, 0, _visH); _tx = vis.Left; _ty = vis.Top; }
         _prevTx = vis.Left; _prevTy = vis.Top; _lastTx = vis.Left; _lastTy = vis.Top;
-        _velEmaX = _velEmaY = 0; _tiltX = _tiltY = _tiltVX = _tiltVY = 0; _loggedMoveFail = false;
+        _velEmaX = _velEmaY = 0; _tiltX = _tiltY = _tiltVX = _tiltVY = 0; 
         ForceForeground(hwnd);
 
         bool mesh = AppConfig.Current.WobblyDeform && TryCapture(hwnd, wrc, vis) && TryMakeTransparent(hwnd);
@@ -1699,7 +1698,7 @@ static class Native
 
     public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (IntPtr)(-4);
 
-    public delegate bool LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
